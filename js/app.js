@@ -13,7 +13,16 @@ const DEFAULT_CATEGORIES = [
   { name: 'Reise',          emoji: '✈️' },
   { name: 'Bildung',        emoji: '📚' },
   { name: 'Geschenke',      emoji: '🎁' },
+  { name: 'Sonstiges',      emoji: '📌' },
+];
+
+const DEFAULT_INCOME_CATEGORIES = [
   { name: 'Gehalt',         emoji: '💰' },
+  { name: 'Freelance',      emoji: '💼' },
+  { name: 'Mieteinnahmen',  emoji: '🏘️' },
+  { name: 'Investitionen',  emoji: '📈' },
+  { name: 'Geschenk',       emoji: '🎁' },
+  { name: 'Steuerrückzahlung', emoji: '🏛️' },
   { name: 'Sonstiges',      emoji: '📌' },
 ];
 
@@ -29,7 +38,12 @@ const CATEGORY_KEYWORDS = {
   'Reise':           ['reise','hotel','flug','urlaub','ferien','airbnb','booking','hostel'],
   'Bildung':         ['bildung','buch','kurs','schule','uni','studium','weiterbildung'],
   'Geschenke':       ['geschenk','geburtstag','weihnachten','present'],
-  'Gehalt':          ['gehalt','lohn','einnahme','einkommen','überweisung','freiberuf','freelance'],
+  // Income
+  'Gehalt':          ['gehalt','lohn','einkommen','monatsgehalt'],
+  'Freelance':       ['freelance','freiberuf','honorar','rechnung','auftrag'],
+  'Mieteinnahmen':   ['mieteinnahme','untermiete','kaltmiete'],
+  'Investitionen':   ['zinsen','dividende','invest','rendite','aktie','etf'],
+  'Steuerrückzahlung': ['steuer','finanzamt','rückzahlung'],
 };
 
 const GERMAN_NUMS = {
@@ -50,6 +64,7 @@ let state = {
   budgets: [],
   currentBudgetId: null,
   categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
+  incomeCategories: JSON.parse(JSON.stringify(DEFAULT_INCOME_CATEGORIES)),
 };
 
 let selectedCategory = null;
@@ -95,6 +110,12 @@ function load() {
     state.budgets.forEach(b => {
       b.expenses.forEach(e => { if (!e.type) e.type = 'expense'; });
     });
+    // Migrate: init income categories if missing
+    if (!state.incomeCategories || state.incomeCategories.length === 0) {
+      state.incomeCategories = JSON.parse(JSON.stringify(DEFAULT_INCOME_CATEGORIES));
+    }
+    // Migrate: move Gehalt out of expense categories
+    state.categories = state.categories.filter(c => c.name !== 'Gehalt');
   } catch(e) {}
   darkMode = localStorage.getItem('darkMode') === 'true';
   if (darkMode) document.body.classList.add('dark');
@@ -191,7 +212,9 @@ const CAT_COLORS = {
 };
 
 function getCat(name) {
-  return state.categories.find(c => c.name === name) || { name, emoji: '📌' };
+  return state.categories.find(c => c.name === name)
+      || state.incomeCategories.find(c => c.name === name)
+      || { name, emoji: '📌' };
 }
 
 function getCatColor(name) {
@@ -484,6 +507,7 @@ function renderHistory() {
 function renderSettings() {
   renderSettingsBudgets();
   renderCatManagement();
+  renderIncomeCatManagement();
   // Sync dark mode toggle
   const toggle = document.getElementById('dark-mode-toggle');
   if (toggle) toggle.checked = darkMode;
@@ -539,6 +563,25 @@ function renderCatManagement() {
   });
 }
 
+function renderIncomeCatManagement() {
+  const el = document.getElementById('icat-management');
+  if (!el) return;
+  el.innerHTML = state.incomeCategories.map(c => `
+    <div class="cat-manage-chip">
+      <span>${c.emoji}</span>
+      <span>${esc(c.name)}</span>
+      <button class="cat-remove-btn" data-name="${esc(c.name)}" title="Löschen">✕</button>
+    </div>`).join('');
+  el.querySelectorAll('.cat-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (state.incomeCategories.length <= 1) { showToast('Mindestens eine Kategorie muss vorhanden sein'); return; }
+      state.incomeCategories = state.incomeCategories.filter(c => c.name !== btn.dataset.name);
+      save();
+      renderIncomeCatManagement();
+    });
+  });
+}
+
 function renderAll() { renderHome(); renderHistory(); renderSettings(); renderStats(); }
 
 // ── Modal: Add Expense ────────────────────────────────────────────
@@ -563,6 +606,7 @@ function closeAddModal() {
 
 function setTypeToggle(type) {
   selectedType = type;
+  selectedCategory = null;
   const expBtn = document.getElementById('type-expense-btn');
   const incBtn = document.getElementById('type-income-btn');
   if (!expBtn || !incBtn) return;
@@ -571,11 +615,14 @@ function setTypeToggle(type) {
   // Update modal title
   const title = document.querySelector('#modal-add .modal-title');
   if (title) title.textContent = type === 'income' ? 'Neue Einnahme' : 'Neue Ausgabe';
+  // Re-render pills for the correct category list
+  renderCatPills(null);
 }
 
 function renderCatPills(selected) {
+  const cats = selectedType === 'income' ? state.incomeCategories : state.categories;
   const el = document.getElementById('cat-pills');
-  el.innerHTML = state.categories.map(c => `
+  el.innerHTML = cats.map(c => `
     <button class="cat-pill ${c.name === selected ? 'selected' : ''}" data-name="${esc(c.name)}">
       ${c.emoji} ${esc(c.name)}
     </button>`).join('');
@@ -792,6 +839,21 @@ function addCategory() {
   showToast(`"${name}" hinzugefügt`);
 }
 
+function addIncomeCategory() {
+  const emoji = document.getElementById('new-icat-emoji').value.trim() || '💰';
+  const name  = document.getElementById('new-icat-name').value.trim();
+  if (!name) { showToast('Bitte gib einen Namen ein'); return; }
+  if (state.incomeCategories.find(c => c.name.toLowerCase() === name.toLowerCase())) {
+    showToast('Diese Kategorie existiert bereits'); return;
+  }
+  state.incomeCategories.push({ name, emoji });
+  save();
+  document.getElementById('new-icat-emoji').value = '';
+  document.getElementById('new-icat-name').value = '';
+  renderIncomeCatManagement();
+  showToast(`"${name}" hinzugefügt`);
+}
+
 // ── Events ────────────────────────────────────────────────────────
 function initEvents() {
   // Navigation
@@ -871,6 +933,9 @@ function initEvents() {
 
   document.getElementById('add-cat-btn').addEventListener('click', addCategory);
   document.getElementById('new-cat-name').addEventListener('keydown', e => { if (e.key === 'Enter') addCategory(); });
+
+  document.getElementById('add-icat-btn').addEventListener('click', addIncomeCategory);
+  document.getElementById('new-icat-name').addEventListener('keydown', e => { if (e.key === 'Enter') addIncomeCategory(); });
 
   // Dark mode toggle
   document.getElementById('dark-mode-toggle').addEventListener('change', toggleDarkMode);
