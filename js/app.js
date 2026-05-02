@@ -226,10 +226,14 @@ function initAuth() {
     }
   });
 
-  // Google Sign-In
+  // Google Sign-In (Redirect ist auf mobilen PWAs zuverlässiger als Popup)
+  const googleProvider = new firebase.auth.GoogleAuthProvider();
+  auth.getRedirectResult().then(result => {
+    if (result && result.user) hideAuthOverlay();
+  }).catch(err => setAuthError(err.message));
+
   document.getElementById('google-signin-btn').addEventListener('click', () => {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(err => setAuthError(err.message));
+    auth.signInWithRedirect(googleProvider).catch(err => setAuthError(err.message));
   });
 
   // E-Mail Anmelden
