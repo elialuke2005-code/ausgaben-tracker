@@ -198,6 +198,10 @@ function updateUserHeader(user) {
     avatarEl.style.display = '';
     if (fallback) fallback.style.display = 'none';
   }
+
+  const firstName = user.displayName ? user.displayName.split(' ')[0] : null;
+  const greeting  = document.querySelector('.header-greeting');
+  if (greeting) greeting.textContent = firstName ? `Hallo, ${firstName} 👋` : 'Hallo 👋';
 }
 
 function clearUserHeader() {
@@ -205,6 +209,9 @@ function clearUserHeader() {
   const infoBlock    = document.getElementById('info-block');
   if (accountBlock) accountBlock.style.display = 'none';
   if (infoBlock)    infoBlock.style.display = '';
+
+  const greeting = document.querySelector('.header-greeting');
+  if (greeting) greeting.textContent = 'Hallo 👋';
 }
 
 function setAuthError(msg) {
