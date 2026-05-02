@@ -128,8 +128,9 @@ function load() {
   } catch(e) {}
   darkMode = localStorage.getItem('darkMode') === 'true';
   if (darkMode) document.body.classList.add('dark');
-  const savedColor = localStorage.getItem('accentColor');
-  if (savedColor) { accentColor = savedColor; setAccentColor(savedColor); }
+  const savedColor = localStorage.getItem('accentColor') || '#3B82F6';
+  accentColor = savedColor;
+  setAccentColor(savedColor);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -207,14 +208,31 @@ function hslToHex(h, s, l) {
 function setAccentColor(hex) {
   accentColor = hex;
   const [h, s, l] = hexToHSL(hex);
-  const dark = hslToHex(h, s, Math.max(l - 12, 10));
-  const mid  = darkMode ? hslToHex(h, Math.max(s-10,0), Math.max(l - 5, 25)) : hslToHex(h, Math.max(s-15,0), Math.min(l + 28, 88));
-  const light= darkMode ? hslToHex(h, Math.max(s-20,0), Math.max(l - 18, 12)) : hslToHex(h, Math.max(s-20,0), Math.min(l + 40, 96));
+  const dark    = hslToHex(h, s, Math.max(l - 12, 10));
+  const darker  = hslToHex(h, s, Math.max(l - 18, 8));
+  const lighter = hslToHex(h, Math.min(s + 5, 100), Math.min(l + 14, 92));
+  const mid     = darkMode ? hslToHex(h, Math.max(s-10,0), Math.max(l - 5, 25))  : hslToHex(h, Math.max(s-15,0), Math.min(l + 28, 88));
+  const light   = darkMode ? hslToHex(h, Math.max(s-20,0), Math.max(l - 18, 12)) : hslToHex(h, Math.max(s-20,0), Math.min(l + 40, 96));
+
+  // Shadow rgba
+  const rr = parseInt(hex.slice(1,3),16);
+  const gg = parseInt(hex.slice(3,5),16);
+  const bb = parseInt(hex.slice(5,7),16);
+  const shadow30 = `rgba(${rr},${gg},${bb},0.30)`;
+  const shadow25 = `rgba(${rr},${gg},${bb},0.25)`;
+
   const root = document.documentElement;
-  root.style.setProperty('--primary', hex);
-  root.style.setProperty('--primary-dark', dark);
-  root.style.setProperty('--primary-mid', mid);
+  root.style.setProperty('--primary',       hex);
+  root.style.setProperty('--primary-dark',  dark);
+  root.style.setProperty('--primary-mid',   mid);
   root.style.setProperty('--primary-light', light);
+  // Summary card gradient
+  root.style.setProperty('--card-grad-start', lighter);
+  root.style.setProperty('--card-grad-mid',   hex);
+  root.style.setProperty('--card-grad-end',   darker);
+  root.style.setProperty('--card-shadow',     shadow30);
+  root.style.setProperty('--header-shadow',   shadow25);
+
   localStorage.setItem('accentColor', hex);
   // Sync picker UI if open
   const picker = document.getElementById('accent-custom-input');
