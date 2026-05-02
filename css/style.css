@@ -213,8 +213,8 @@ main {
   z-index: 1;
 }
 
-.s-amount.s-positive { color: #6EE7B7; }
-.s-amount.s-negative { color: #FCA5A5; }
+.s-amount.s-positive { color: white; }
+.s-amount.s-negative { color: white; }
 
 .s-row2 {
   display: flex;
@@ -246,7 +246,7 @@ main {
   opacity: 0.95;
 }
 
-.s-income { color: #6EE7B7; }
+.s-income { color: white; }
 
 .s-divider {
   height: 1px;
