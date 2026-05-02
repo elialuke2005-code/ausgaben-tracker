@@ -70,10 +70,14 @@ let state = {
 
 let selectedCategory = null;
 let selectedType = 'expense'; // for add modal
+let selectedPayment = null;   // 'cash' | 'card' | null
 let splitEnabled = false;
+let splitMode = 'ipaid';      // 'ipaid' | 'iowe'
 let selectedSplitMembers = [];
+let selectedOweToMember = null;
 let statsType = 'expense';    // for stats view
 let darkMode = false;
+let accentColor = '#3B82F6';
 let recognition = null;
 let isListening = false;
 
@@ -124,6 +128,8 @@ function load() {
   } catch(e) {}
   darkMode = localStorage.getItem('darkMode') === 'true';
   if (darkMode) document.body.classList.add('dark');
+  const savedColor = localStorage.getItem('accentColor');
+  if (savedColor) { accentColor = savedColor; setAccentColor(savedColor); }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -167,6 +173,55 @@ function toggleDarkMode() {
   localStorage.setItem('darkMode', darkMode);
   const toggle = document.getElementById('dark-mode-toggle');
   if (toggle) toggle.checked = darkMode;
+}
+
+// ── Accent Color ─────────────────────────────────────────────────
+function hexToHSL(hex) {
+  let r = parseInt(hex.slice(1,3),16)/255;
+  let g = parseInt(hex.slice(3,5),16)/255;
+  let b = parseInt(hex.slice(5,7),16)/255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h, s, l = (max+min)/2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+    switch(max) {
+      case r: h = ((g-b)/d + (g<b?6:0))/6; break;
+      case g: h = ((b-r)/d + 2)/6; break;
+      default: h = ((r-g)/d + 4)/6;
+    }
+  }
+  return [Math.round(h*360), Math.round(s*100), Math.round(l*100)];
+}
+
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = n => (n + h/30) % 12;
+  const a = s * Math.min(l, 1-l);
+  const f = n => l - a*Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n), 1)));
+  const toHex = x => Math.round(x*255).toString(16).padStart(2,'0');
+  return '#' + toHex(f(0)) + toHex(f(8)) + toHex(f(4));
+}
+
+function setAccentColor(hex) {
+  accentColor = hex;
+  const [h, s, l] = hexToHSL(hex);
+  const dark = hslToHex(h, s, Math.max(l - 12, 10));
+  const mid  = darkMode ? hslToHex(h, Math.max(s-10,0), Math.max(l - 5, 25)) : hslToHex(h, Math.max(s-15,0), Math.min(l + 28, 88));
+  const light= darkMode ? hslToHex(h, Math.max(s-20,0), Math.max(l - 18, 12)) : hslToHex(h, Math.max(s-20,0), Math.min(l + 40, 96));
+  const root = document.documentElement;
+  root.style.setProperty('--primary', hex);
+  root.style.setProperty('--primary-dark', dark);
+  root.style.setProperty('--primary-mid', mid);
+  root.style.setProperty('--primary-light', light);
+  localStorage.setItem('accentColor', hex);
+  // Sync picker UI if open
+  const picker = document.getElementById('accent-custom-input');
+  if (picker) picker.value = hex;
+  document.querySelectorAll('.accent-swatch').forEach(sw => {
+    sw.classList.toggle('active', sw.dataset.color === hex);
+  });
 }
 
 // ── Budget Ops ───────────────────────────────────────────────────
@@ -230,13 +285,60 @@ function getCatColor(name) {
 function toggleSplitSection() {
   splitEnabled = document.getElementById('split-toggle').checked;
   selectedSplitMembers = splitEnabled ? [...state.splitMembers] : [];
+  selectedOweToMember = null;
+  splitMode = 'ipaid';
   const sec = document.getElementById('split-section');
   if (sec) sec.classList.toggle('hidden', !splitEnabled);
+  renderSplitDirectionToggle();
   renderSplitMembersInModal();
   updateSplitPreview();
 }
 
+function renderSplitDirectionToggle() {
+  const el = document.getElementById('split-direction-toggle');
+  if (!el) return;
+  el.innerHTML = `
+    <button class="split-dir-btn ${splitMode === 'ipaid' ? 'active' : ''}" data-mode="ipaid">💰 Ich habe gezahlt</button>
+    <button class="split-dir-btn ${splitMode === 'iowe' ? 'active' : ''}" data-mode="iowe">🤝 Ich schulde</button>`;
+  el.querySelectorAll('.split-dir-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      splitMode = btn.dataset.mode;
+      selectedSplitMembers = splitMode === 'ipaid' ? [...state.splitMembers] : [];
+      selectedOweToMember = null;
+      renderSplitDirectionToggle();
+      renderSplitMembersInModal();
+      updateSplitPreview();
+    });
+  });
+}
+
+function renderOweToSelect() {
+  const el = document.getElementById('split-members-list');
+  if (!el) return;
+  if (state.splitMembers.length === 0) {
+    el.innerHTML = `<div class="split-no-members">Keine Personen hinterlegt — gehe zu Einstellungen → Personen.</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="field-label" style="margin:6px 0 8px;">Wem schulde ich?</div>` +
+    state.splitMembers.map(name => `
+      <label class="split-member-item ${selectedOweToMember === name ? 'selected' : ''}">
+        <input type="radio" name="owe-to" class="split-owe-radio" data-name="${esc(name)}"
+          ${selectedOweToMember === name ? 'checked' : ''}>
+        <span>${esc(name)}</span>
+      </label>`).join('');
+  el.querySelectorAll('.split-owe-radio').forEach(rb => {
+    rb.addEventListener('change', () => {
+      selectedOweToMember = rb.dataset.name;
+      // Refresh label styling
+      el.querySelectorAll('.split-member-item').forEach(li => li.classList.remove('selected'));
+      rb.closest('.split-member-item').classList.add('selected');
+      updateSplitPreview();
+    });
+  });
+}
+
 function renderSplitMembersInModal() {
+  if (splitMode === 'iowe') { renderOweToSelect(); return; }
   const el = document.getElementById('split-members-list');
   if (!el) return;
   if (state.splitMembers.length === 0) {
@@ -261,26 +363,42 @@ function renderSplitMembersInModal() {
 function updateSplitPreview() {
   const el = document.getElementById('split-preview');
   if (!el) return;
-  if (!splitEnabled || selectedSplitMembers.length === 0) { el.textContent = ''; return; }
   const raw = document.getElementById('amount-input').value.replace(',', '.').trim();
   const amount = parseFloat(raw) || 0;
-  const total = selectedSplitMembers.length + 1; // +1 for me
-  const myShare = amount / total;
-  el.innerHTML = `<span class="split-preview-label">Mein Anteil:</span> <span class="split-preview-amount">${fmt(myShare)}</span> <span class="split-preview-sub">(÷${total})</span>`;
+  if (!splitEnabled) { el.textContent = ''; return; }
+  if (splitMode === 'iowe') {
+    if (!selectedOweToMember) { el.innerHTML = `<span class="split-preview-label">Person auswählen</span>`; return; }
+    el.innerHTML = `<span class="split-preview-label">Ich schulde</span> <span class="split-preview-name">${esc(selectedOweToMember)}</span> <span class="split-preview-amount">${fmt(amount)}</span>`;
+  } else {
+    if (selectedSplitMembers.length === 0) { el.textContent = ''; return; }
+    const total = selectedSplitMembers.length + 1;
+    const myShare = amount / total;
+    el.innerHTML = `<span class="split-preview-label">Mein Anteil:</span> <span class="split-preview-amount">${fmt(myShare)}</span> <span class="split-preview-sub">(÷${total})</span>`;
+  }
 }
 
 function calcSettlement() {
-  // Returns { memberName: totalOwed } for all unsettled splits
+  // Returns { memberName: netAmount }
+  // positive = they owe me, negative = I owe them
   const b = currentBudget();
   if (!b) return {};
   const balances = {};
   b.expenses.forEach(e => {
     if (!e.split?.enabled) return;
-    e.split.members.forEach(name => {
-      if (!e.split.settled?.[name]) {
-        balances[name] = (balances[name] || 0) + e.split.perShare;
+    if (e.split.mode === 'iowe') {
+      // I owe this person
+      const name = e.split.oweTo;
+      if (name && !e.split.settled) {
+        balances[name] = (balances[name] || 0) - e.split.myOwedAmount;
       }
-    });
+    } else {
+      // ipaid: they owe me
+      (e.split.members || []).forEach(name => {
+        if (!e.split.settled?.[name]) {
+          balances[name] = (balances[name] || 0) + e.split.perShare;
+        }
+      });
+    }
   });
   return balances;
 }
@@ -290,9 +408,13 @@ function settleAll(memberName) {
   if (!b) return;
   b.expenses.forEach(e => {
     if (!e.split?.enabled) return;
-    if (e.split.members.includes(memberName)) {
-      if (!e.split.settled) e.split.settled = {};
-      e.split.settled[memberName] = true;
+    if (e.split.mode === 'iowe') {
+      if (e.split.oweTo === memberName) e.split.settled = true;
+    } else {
+      if ((e.split.members || []).includes(memberName)) {
+        if (!e.split.settled) e.split.settled = {};
+        e.split.settled[memberName] = true;
+      }
     }
   });
   save();
@@ -303,23 +425,31 @@ function renderSettlement() {
   const sec = document.getElementById('settlement-section');
   if (!sec) return;
   const balances = calcSettlement();
-  const entries = Object.entries(balances).filter(([, v]) => v > 0);
+  const entries = Object.entries(balances).filter(([, v]) => v !== 0);
   if (entries.length === 0) { sec.classList.add('hidden'); return; }
   sec.classList.remove('hidden');
   const list = document.getElementById('settlement-list');
-  list.innerHTML = entries.map(([name, amount]) => `
-    <div class="settlement-row">
-      <div class="settlement-avatar">${name.charAt(0).toUpperCase()}</div>
+  list.innerHTML = entries.map(([name, net]) => {
+    const iOwe = net < 0;
+    const amount = Math.abs(net);
+    const rowClass = iOwe ? 'settlement-row settlement-row-owe' : 'settlement-row';
+    const avatarClass = iOwe ? 'settlement-avatar settlement-avatar-owe' : 'settlement-avatar';
+    const subText = iOwe ? `Du schuldest ${esc(name)}` : 'schuldet dir';
+    const amountClass = iOwe ? 'settlement-amount settlement-amount-owe' : 'settlement-amount';
+    const amountStr = (iOwe ? '-' : '+') + fmt(amount);
+    return `<div class="${rowClass}">
+      <div class="${avatarClass}">${name.charAt(0).toUpperCase()}</div>
       <div class="settlement-info">
         <span class="settlement-name">${esc(name)}</span>
-        <span class="settlement-sub">schuldet dir</span>
+        <span class="settlement-sub">${subText}</span>
       </div>
-      <span class="settlement-amount">${fmt(amount)}</span>
-      <button class="settle-btn" data-name="${esc(name)}">✓ Beglichen</button>
-    </div>`).join('');
+      <span class="${amountClass}">${amountStr}</span>
+      <button class="settle-btn ${iOwe ? 'settle-btn-owe' : ''}" data-name="${esc(name)}">✓ Beglichen</button>
+    </div>`;
+  }).join('');
   list.querySelectorAll('.settle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (confirm(`Alle offenen Beträge von ${btn.dataset.name} als beglichen markieren?`)) {
+      if (confirm(`Alle offenen Beträge mit ${btn.dataset.name} als beglichen markieren?`)) {
         settleAll(btn.dataset.name);
       }
     });
@@ -358,6 +488,14 @@ function addSplitMember() {
   input.value = '';
   renderSplitMembersSettings();
   showToast(`"${name}" hinzugefügt`);
+}
+
+// ── Payment Method ────────────────────────────────────────────────
+function setPaymentMethod(type) {
+  selectedPayment = selectedPayment === type ? null : type; // toggle off if same
+  document.querySelectorAll('.payment-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.payment === selectedPayment);
+  });
 }
 
 // ── Navigation ───────────────────────────────────────────────────
@@ -495,15 +633,25 @@ function expenseHTML(e) {
   const isIncome = e.type === 'income';
   const iconBg = isIncome ? '#D1FAE5' : getCatColor(e.category);
   const amountStr = (isIncome ? '+' : '') + fmt(e.amount);
-  const hasSplit = e.split?.enabled && e.split.members?.length > 0;
-  const splitBadge = hasSplit
-    ? `<span class="split-badge">÷${e.split.members.length + 1}</span>` : '';
-  const splitShareLine = hasSplit
-    ? `<div class="expense-split-share">Mein Anteil: ${fmt(e.split.perShare)}</div>` : '';
+  const payIcon = !isIncome && e.payment ? `<span class="payment-icon">${e.payment === 'cash' ? '💵' : '💳'}</span>` : '';
+
+  let splitBadge = '', splitShareLine = '';
+  if (e.split?.enabled) {
+    if (e.split.mode === 'iowe') {
+      splitBadge = `<span class="split-badge split-badge-owe">🤝 schulde</span>`;
+      if (!e.split.settled) {
+        splitShareLine = `<div class="expense-split-share expense-split-owe">Ich schulde ${esc(e.split.oweTo || '')}: ${fmt(e.split.myOwedAmount)}</div>`;
+      }
+    } else if (e.split.members?.length > 0) {
+      splitBadge = `<span class="split-badge">÷${e.split.members.length + 1}</span>`;
+      splitShareLine = `<div class="expense-split-share">Mein Anteil: ${fmt(e.split.perShare)}</div>`;
+    }
+  }
+
   return `<div class="expense-item" data-id="${e.id}">
     <div class="expense-icon" style="background:${iconBg}">${c.emoji}</div>
     <div class="expense-info">
-      <div class="expense-cat">${esc(e.category)}${splitBadge}</div>
+      <div class="expense-cat">${esc(e.category)}${splitBadge}${payIcon}</div>
       ${e.note ? `<div class="expense-note">${esc(e.note)}</div>` : ''}
       ${splitShareLine}
     </div>
@@ -658,6 +806,39 @@ function renderSettings() {
   // Sync dark mode toggle
   const toggle = document.getElementById('dark-mode-toggle');
   if (toggle) toggle.checked = darkMode;
+  // Sync accent color
+  renderAccentColorPicker();
+}
+
+function renderAccentColorPicker() {
+  const el = document.getElementById('accent-swatches');
+  if (!el) return;
+  const PRESETS = [
+    { color: '#3B82F6', label: 'Blau' },
+    { color: '#10B981', label: 'Grün' },
+    { color: '#8B5CF6', label: 'Lila' },
+    { color: '#EF4444', label: 'Rot' },
+    { color: '#F97316', label: 'Orange' },
+    { color: '#EC4899', label: 'Pink' },
+    { color: '#06B6D4', label: 'Cyan' },
+  ];
+  el.innerHTML = PRESETS.map(p => `
+    <button class="accent-swatch ${accentColor === p.color ? 'active' : ''}"
+      data-color="${p.color}" style="background:${p.color}" title="${p.label}"></button>`).join('') +
+    `<label class="accent-swatch accent-swatch-custom" title="Eigene Farbe">
+      <span>✏️</span>
+      <input type="color" id="accent-custom-input" value="${accentColor}" style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;">
+    </label>`;
+
+  el.querySelectorAll('.accent-swatch[data-color]').forEach(sw => {
+    sw.addEventListener('click', () => setAccentColor(sw.dataset.color));
+  });
+  const customLabel = el.querySelector('.accent-swatch-custom');
+  const customInput = el.querySelector('#accent-custom-input');
+  if (customLabel && customInput) {
+    customLabel.addEventListener('click', () => customInput.click());
+    customInput.addEventListener('input', () => setAccentColor(customInput.value));
+  }
 }
 
 function renderSettingsBudgets() {
@@ -735,12 +916,20 @@ function renderAll() { renderHome(); renderHistory(); renderSettings(); renderSt
 function openAddModal(preselect = null, preType = null) {
   selectedCategory = preselect;
   selectedType = preType || 'expense';
+  selectedPayment = null;
   splitEnabled = false;
+  splitMode = 'ipaid';
   selectedSplitMembers = [];
+  selectedOweToMember = null;
   document.getElementById('amount-input').value = '';
   document.getElementById('note-input').value = '';
   document.getElementById('date-input').value = todayStr();
   document.getElementById('voice-status').textContent = '';
+  // Reset payment toggle
+  document.querySelectorAll('.payment-btn').forEach(b => b.classList.remove('active'));
+  // Show/hide payment section based on type
+  const paySection = document.getElementById('payment-section');
+  if (paySection) paySection.classList.toggle('hidden', selectedType === 'income');
   // Reset split toggle
   const splitToggle = document.getElementById('split-toggle');
   if (splitToggle) splitToggle.checked = false;
@@ -771,6 +960,9 @@ function setTypeToggle(type) {
   // Update modal title
   const title = document.querySelector('#modal-add .modal-title');
   if (title) title.textContent = type === 'income' ? 'Neue Einnahme' : 'Neue Ausgabe';
+  // Show/hide payment method (only for expenses)
+  const paySection = document.getElementById('payment-section');
+  if (paySection) paySection.classList.toggle('hidden', type === 'income');
   // Re-render pills for the correct category list
   renderCatPills(null);
 }
@@ -805,15 +997,19 @@ function saveExpense() {
   const date = document.getElementById('date-input').value || todayStr();
 
   let splitData = null;
-  if (splitEnabled && selectedSplitMembers.length > 0 && selectedType === 'expense') {
-    const total = selectedSplitMembers.length + 1;
-    const perShare = Math.round((amount / total) * 100) / 100;
-    const settled = {};
-    selectedSplitMembers.forEach(n => { settled[n] = false; });
-    splitData = { enabled: true, members: [...selectedSplitMembers], perShare, settled };
+  if (splitEnabled && selectedType === 'expense') {
+    if (splitMode === 'iowe' && selectedOweToMember) {
+      splitData = { enabled: true, mode: 'iowe', oweTo: selectedOweToMember, myOwedAmount: amount, settled: false };
+    } else if (splitMode === 'ipaid' && selectedSplitMembers.length > 0) {
+      const total = selectedSplitMembers.length + 1;
+      const perShare = Math.round((amount / total) * 100) / 100;
+      const settled = {};
+      selectedSplitMembers.forEach(n => { settled[n] = false; });
+      splitData = { enabled: true, mode: 'ipaid', members: [...selectedSplitMembers], perShare, settled };
+    }
   }
 
-  addExpense({ amount, category: selectedCategory, note, date, type: selectedType, split: splitData });
+  addExpense({ amount, category: selectedCategory, note, date, type: selectedType, payment: selectedPayment, split: splitData });
   closeAddModal();
   renderAll();
   const label = selectedType === 'income' ? 'Einnahme' : 'Ausgabe';
@@ -834,6 +1030,27 @@ function openDetailModal(expenseId) {
   amtEl.style.color = isIncome ? '#10B981' : '';
   document.getElementById('detail-date').textContent = fmtDate(e.date) + ' · ' + new Date(e.date+'T12:00:00').toLocaleDateString('de-DE', {day:'numeric',month:'long',year:'numeric'});
   document.getElementById('detail-note').textContent = e.note || '—';
+  // Payment method
+  const payEl = document.getElementById('detail-payment');
+  if (payEl) {
+    if (e.payment === 'cash') { payEl.textContent = '💵 Bar'; payEl.style.display = ''; }
+    else if (e.payment === 'card') { payEl.textContent = '💳 Karte'; payEl.style.display = ''; }
+    else { payEl.textContent = ''; payEl.style.display = 'none'; }
+  }
+  // Split info
+  const splitEl = document.getElementById('detail-split');
+  if (splitEl) {
+    if (e.split?.enabled) {
+      if (e.split.mode === 'iowe') {
+        splitEl.textContent = `🤝 Ich schulde ${e.split.oweTo}: ${fmt(e.split.myOwedAmount)}${e.split.settled ? ' ✓' : ''}`;
+        splitEl.style.display = '';
+      } else if (e.split.members?.length > 0) {
+        const unsettled = e.split.members.filter(n => !e.split.settled?.[n]);
+        splitEl.textContent = `👥 Aufgeteilt mit ${e.split.members.join(', ')} · Mein Anteil: ${fmt(e.split.perShare)}${unsettled.length === 0 ? ' ✓' : ''}`;
+        splitEl.style.display = '';
+      } else { splitEl.style.display = 'none'; }
+    } else { splitEl.style.display = 'none'; }
+  }
   document.getElementById('detail-del-btn').dataset.id = e.id;
   document.getElementById('modal-detail').classList.remove('hidden');
 }
@@ -1106,6 +1323,11 @@ function initEvents() {
 
   // Dark mode toggle
   document.getElementById('dark-mode-toggle').addEventListener('change', toggleDarkMode);
+
+  // Payment method buttons
+  document.querySelectorAll('.payment-btn').forEach(btn => {
+    btn.addEventListener('click', () => setPaymentMethod(btn.dataset.payment));
+  });
 
   // Split toggle
   document.getElementById('split-toggle').addEventListener('change', toggleSplitSection);

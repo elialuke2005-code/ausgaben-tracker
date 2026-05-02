@@ -152,6 +152,13 @@
             <span class="toggle-slider"></span>
           </label>
         </div>
+        <div class="settings-row" style="cursor:default;flex-direction:column;align-items:flex-start;gap:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="settings-row-icon">🎨</span>
+            <span class="settings-row-text">Akzentfarbe</span>
+          </div>
+          <div id="accent-swatches" class="accent-swatches"></div>
+        </div>
       </div>
 
       <div class="settings-block">
@@ -275,6 +282,15 @@
       <div class="field-label">Kategorie</div>
       <div id="cat-pills" class="cat-pills"></div>
 
+      <!-- Payment Method (expense only) -->
+      <div id="payment-section">
+        <div class="field-label">Zahlungsart <span style="font-weight:400;text-transform:none;font-size:11px;">(optional)</span></div>
+        <div class="payment-toggle">
+          <button class="payment-btn" data-payment="cash">💵 Bar</button>
+          <button class="payment-btn" data-payment="card">💳 Karte</button>
+        </div>
+      </div>
+
       <!-- Split -->
       <div class="split-row">
         <span class="split-label">👥 Aufteilen</span>
@@ -284,6 +300,7 @@
         </label>
       </div>
       <div id="split-section" class="split-section hidden">
+        <div id="split-direction-toggle" class="split-direction-toggle"></div>
         <div id="split-members-list" class="split-members-list"></div>
         <div id="split-preview" class="split-preview"></div>
       </div>
@@ -343,6 +360,14 @@
       <div class="detail-row">
         <span class="detail-row-label">Datum</span>
         <span id="detail-date"></span>
+      </div>
+      <div class="detail-row" id="detail-payment-row">
+        <span class="detail-row-label">Zahlungsart</span>
+        <span id="detail-payment"></span>
+      </div>
+      <div class="detail-row" id="detail-split-row">
+        <span class="detail-row-label">Aufteilung</span>
+        <span id="detail-split" style="font-size:13px;"></span>
       </div>
       <div class="detail-row">
         <span class="detail-row-label">Notiz</span>

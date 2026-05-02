@@ -1336,5 +1336,149 @@ body.dark .settle-btn { background: rgba(16,185,129,0.2); color: #34D399; }
   flex-shrink: 0;
 }
 
+/* ── Payment Method ─────────────────────────── */
+#payment-section {
+  margin-bottom: 14px;
+}
+
+.payment-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.payment-btn {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.payment-btn:active { transform: scale(0.97); }
+.payment-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.payment-icon {
+  font-size: 13px;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+/* ── Split Direction Toggle ──────────────────── */
+.split-direction-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.split-dir-btn {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+.split-dir-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.split-member-item input[type="radio"] {
+  accent-color: var(--primary);
+  width: 16px; height: 16px;
+}
+
+.split-member-item.selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.split-preview-name {
+  color: var(--primary);
+  font-weight: 700;
+  margin: 0 2px;
+}
+
+.split-badge-owe {
+  background: #FEE2E2;
+  color: #DC2626;
+  font-size: 9px;
+}
+body.dark .split-badge-owe { background: rgba(220,38,38,0.2); color: #F87171; }
+
+.expense-split-owe {
+  color: #DC2626;
+}
+body.dark .expense-split-owe { color: #F87171; }
+
+/* ── Settlement Owe Direction ────────────────── */
+.settlement-row-owe {
+  background: #FFF5F5;
+}
+body.dark .settlement-row-owe { background: rgba(239,68,68,0.07); }
+
+.settlement-avatar-owe {
+  background: #EF4444;
+}
+
+.settlement-amount-owe {
+  color: #EF4444;
+}
+body.dark .settlement-amount-owe { color: #F87171; }
+
+.settle-btn-owe {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+.settle-btn-owe:active { background: #FECACA; }
+body.dark .settle-btn-owe { background: rgba(239,68,68,0.2); color: #F87171; }
+
+/* ── Accent Color Swatches ───────────────────── */
+.accent-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 0 4px;
+}
+
+.accent-swatch {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 2.5px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+.accent-swatch:active { transform: scale(0.88); }
+.accent-swatch.active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text);
+}
+
+.accent-swatch-custom {
+  background: var(--bg);
+  border: 2.5px dashed var(--border);
+  font-size: 15px;
+  overflow: hidden;
+}
+
 /* ── Utility ────────────────────────────────── */
 .hidden { display: none !important; }
