@@ -1,5 +1,5 @@
-const CACHE = 'ausgaben-v2';
-const FILES = ['./', './index.html', './css/style.css', './js/app.js', './manifest.json', './icon.svg'];
+const CACHE = 'ausgaben-v3';
+const FILES = ['./', './index.html', './css/style.css', './js/app.js', './js/firebase-config.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));

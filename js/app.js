@@ -107,30 +107,165 @@ function shiftMonth(delta) {
 // ── Storage ──────────────────────────────────────────────────────
 function save() {
   try { localStorage.setItem('ausgaben_v2', JSON.stringify(state)); } catch(e) {}
+  const user = typeof auth !== 'undefined' && auth.currentUser;
+  if (user) {
+    db.collection('users').doc(user.uid).set({
+      ...state,
+      darkMode,
+      accentColor,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }).catch(() => {});
+  }
+}
+
+function migrateState() {
+  state.budgets.forEach(b => {
+    b.expenses.forEach(e => { if (!e.type) e.type = 'expense'; });
+  });
+  if (!state.incomeCategories || state.incomeCategories.length === 0)
+    state.incomeCategories = JSON.parse(JSON.stringify(DEFAULT_INCOME_CATEGORIES));
+  state.categories = state.categories.filter(c => c.name !== 'Gehalt');
+  if (!state.splitMembers) state.splitMembers = [];
 }
 
 function load() {
   try {
     const raw = localStorage.getItem('ausgaben_v2');
     if (raw) state = { ...state, ...JSON.parse(raw) };
-    // Migrate: ensure all entries have type
-    state.budgets.forEach(b => {
-      b.expenses.forEach(e => { if (!e.type) e.type = 'expense'; });
-    });
-    // Migrate: init income categories if missing
-    if (!state.incomeCategories || state.incomeCategories.length === 0) {
-      state.incomeCategories = JSON.parse(JSON.stringify(DEFAULT_INCOME_CATEGORIES));
-    }
-    // Migrate: move Gehalt out of expense categories
-    state.categories = state.categories.filter(c => c.name !== 'Gehalt');
-    // Migrate: init splitMembers if missing
-    if (!state.splitMembers) state.splitMembers = [];
+    migrateState();
   } catch(e) {}
   darkMode = localStorage.getItem('darkMode') === 'true';
   if (darkMode) document.body.classList.add('dark');
   const savedColor = localStorage.getItem('accentColor') || '#3B82F6';
   accentColor = savedColor;
   setAccentColor(savedColor);
+}
+
+async function loadFromFirestore(uid) {
+  try {
+    const doc = await db.collection('users').doc(uid).get();
+    if (doc.exists) {
+      const { darkMode: dm, accentColor: ac, updatedAt, ...stateData } = doc.data();
+      state = { ...state, ...stateData };
+      migrateState();
+      if (dm !== undefined) {
+        darkMode = dm;
+        localStorage.setItem('darkMode', dm);
+        document.body.classList.toggle('dark', dm);
+        const tog = document.getElementById('dark-mode-toggle');
+        if (tog) tog.checked = dm;
+      }
+      if (ac !== undefined) {
+        accentColor = ac;
+        localStorage.setItem('accentColor', ac);
+        setAccentColor(ac);
+      }
+      localStorage.setItem('ausgaben_v2', JSON.stringify(state));
+    } else {
+      // Erster Login – vorhandene localStorage-Daten in Firestore übertragen
+      save();
+    }
+  } catch(e) {}
+  if (state.budgets.length === 0) createBudget('Allgemein');
+  if (!state.budgets.find(b => b.id === state.currentBudgetId))
+    state.currentBudgetId = state.budgets[0].id;
+  renderAll();
+}
+
+// ── Firebase Auth ─────────────────────────────────────────────────
+function showAuthOverlay() {
+  document.getElementById('auth-overlay').classList.remove('hidden');
+}
+
+function hideAuthOverlay() {
+  document.getElementById('auth-overlay').classList.add('hidden');
+}
+
+function updateUserHeader(user) {
+  const accountBlock = document.getElementById('account-block');
+  const infoBlock    = document.getElementById('info-block');
+  if (accountBlock) accountBlock.style.display = '';
+  if (infoBlock)    infoBlock.style.display = 'none';
+
+  const nameEl   = document.getElementById('user-name');
+  const emailEl  = document.getElementById('user-email');
+  const avatarEl = document.getElementById('user-avatar');
+  const fallback = document.getElementById('user-avatar-fallback');
+  if (nameEl)  nameEl.textContent  = user.displayName || 'Kein Name';
+  if (emailEl) emailEl.textContent = user.email || '';
+  if (user.photoURL && avatarEl) {
+    avatarEl.src = user.photoURL;
+    avatarEl.style.display = '';
+    if (fallback) fallback.style.display = 'none';
+  }
+}
+
+function clearUserHeader() {
+  const accountBlock = document.getElementById('account-block');
+  const infoBlock    = document.getElementById('info-block');
+  if (accountBlock) accountBlock.style.display = 'none';
+  if (infoBlock)    infoBlock.style.display = '';
+}
+
+function setAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  if (el) el.textContent = msg;
+}
+
+function initAuth() {
+  if (typeof auth === 'undefined') return;
+
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      hideAuthOverlay();
+      updateUserHeader(user);
+      loadFromFirestore(user.uid);
+    } else {
+      clearUserHeader();
+      showAuthOverlay();
+    }
+  });
+
+  // Google Sign-In
+  document.getElementById('google-signin-btn').addEventListener('click', () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(err => setAuthError(err.message));
+  });
+
+  // E-Mail Anmelden
+  document.getElementById('email-login-btn').addEventListener('click', () => {
+    const email = document.getElementById('auth-email').value.trim();
+    const pass  = document.getElementById('auth-password').value;
+    setAuthError('');
+    auth.signInWithEmailAndPassword(email, pass).catch(err => {
+      setAuthError(err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found'
+        ? 'E-Mail oder Passwort falsch.'
+        : err.message);
+    });
+  });
+
+  // E-Mail Registrieren
+  document.getElementById('email-register-btn').addEventListener('click', () => {
+    const email = document.getElementById('auth-email').value.trim();
+    const pass  = document.getElementById('auth-password').value;
+    setAuthError('');
+    if (pass.length < 6) { setAuthError('Passwort muss mind. 6 Zeichen lang sein.'); return; }
+    auth.createUserWithEmailAndPassword(email, pass).catch(err => {
+      setAuthError(err.code === 'auth/email-already-in-use'
+        ? 'E-Mail wird bereits verwendet.'
+        : err.message);
+    });
+  });
+
+  // Ohne Konto fortfahren
+  document.getElementById('auth-skip-btn').addEventListener('click', () => {
+    hideAuthOverlay();
+  });
+
+  // Anmelden aus Einstellungen
+  document.getElementById('login-from-settings-btn')?.addEventListener('click', () => {
+    showAuthOverlay();
+  });
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -174,6 +309,8 @@ function toggleDarkMode() {
   localStorage.setItem('darkMode', darkMode);
   const toggle = document.getElementById('dark-mode-toggle');
   if (toggle) toggle.checked = darkMode;
+  const user = typeof auth !== 'undefined' && auth.currentUser;
+  if (user) db.collection('users').doc(user.uid).update({ darkMode }).catch(() => {});
 }
 
 // ── Accent Color ─────────────────────────────────────────────────
@@ -234,6 +371,8 @@ function setAccentColor(hex) {
   root.style.setProperty('--header-shadow',   shadow25);
 
   localStorage.setItem('accentColor', hex);
+  const user = typeof auth !== 'undefined' && auth.currentUser;
+  if (user) db.collection('users').doc(user.uid).update({ accentColor: hex }).catch(() => {});
   // Sync picker UI if open
   const picker = document.getElementById('accent-custom-input');
   if (picker) picker.value = hex;
@@ -1365,6 +1504,14 @@ function init() {
   initVoice();
   renderAll();
   initEvents();
+  initAuth();
+
+  // Sign-out button
+  document.getElementById('signout-btn')?.addEventListener('click', () => {
+    if (typeof auth !== 'undefined') {
+      auth.signOut().then(() => showToast('Abgemeldet'));
+    }
+  });
 
   if ('serviceWorker' in navigator)
     navigator.serviceWorker.register('./sw.js').catch(() => {});
