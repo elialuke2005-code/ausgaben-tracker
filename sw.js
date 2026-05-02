@@ -1,4 +1,4 @@
-const CACHE = 'ausgaben-v1';
+const CACHE = 'ausgaben-v2';
 const FILES = ['./', './index.html', './css/style.css', './js/app.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
