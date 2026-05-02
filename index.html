@@ -67,6 +67,12 @@
       <div class="section-title">Kategorien diesen Monat</div>
       <div id="cat-breakdown" class="cat-breakdown"></div>
 
+      <!-- Settlement -->
+      <div id="settlement-section" class="hidden">
+        <div class="section-title">Ausstehende Splits</div>
+        <div id="settlement-list" class="settlement-card"></div>
+      </div>
+
       <div class="section-title">Schnell hinzufügen</div>
       <div id="quick-cats" class="quick-cats"></div>
 
@@ -124,6 +130,15 @@
         <div class="settings-row" id="add-budget-settings-btn">
           <span class="settings-row-icon">➕</span>
           <span class="settings-row-text">Neues Budget erstellen</span>
+        </div>
+      </div>
+
+      <div class="settings-block">
+        <div class="settings-block-title">Personen zum Aufteilen</div>
+        <div id="split-members-settings" class="cat-manage-wrap"></div>
+        <div class="add-cat-row">
+          <input type="text" id="new-split-member" class="text-input-sm" placeholder="Name, z. B. Anna">
+          <button id="add-split-member-btn" class="btn-confirm">Hinzufügen</button>
         </div>
       </div>
 
@@ -259,6 +274,19 @@
       <!-- Category -->
       <div class="field-label">Kategorie</div>
       <div id="cat-pills" class="cat-pills"></div>
+
+      <!-- Split -->
+      <div class="split-row">
+        <span class="split-label">👥 Aufteilen</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="split-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div id="split-section" class="split-section hidden">
+        <div id="split-members-list" class="split-members-list"></div>
+        <div id="split-preview" class="split-preview"></div>
+      </div>
 
       <!-- Note -->
       <textarea id="note-input" placeholder="Notiz (optional)" rows="2"></textarea>

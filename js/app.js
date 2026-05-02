@@ -65,10 +65,13 @@ let state = {
   currentBudgetId: null,
   categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
   incomeCategories: JSON.parse(JSON.stringify(DEFAULT_INCOME_CATEGORIES)),
+  splitMembers: [],
 };
 
 let selectedCategory = null;
 let selectedType = 'expense'; // for add modal
+let splitEnabled = false;
+let selectedSplitMembers = [];
 let statsType = 'expense';    // for stats view
 let darkMode = false;
 let recognition = null;
@@ -116,6 +119,8 @@ function load() {
     }
     // Migrate: move Gehalt out of expense categories
     state.categories = state.categories.filter(c => c.name !== 'Gehalt');
+    // Migrate: init splitMembers if missing
+    if (!state.splitMembers) state.splitMembers = [];
   } catch(e) {}
   darkMode = localStorage.getItem('darkMode') === 'true';
   if (darkMode) document.body.classList.add('dark');
@@ -221,6 +226,140 @@ function getCatColor(name) {
   return CAT_COLORS[name] || '#EFF6FF';
 }
 
+// ── Split Helpers ─────────────────────────────────────────────────
+function toggleSplitSection() {
+  splitEnabled = document.getElementById('split-toggle').checked;
+  selectedSplitMembers = splitEnabled ? [...state.splitMembers] : [];
+  const sec = document.getElementById('split-section');
+  if (sec) sec.classList.toggle('hidden', !splitEnabled);
+  renderSplitMembersInModal();
+  updateSplitPreview();
+}
+
+function renderSplitMembersInModal() {
+  const el = document.getElementById('split-members-list');
+  if (!el) return;
+  if (state.splitMembers.length === 0) {
+    el.innerHTML = `<div class="split-no-members">Keine Personen hinterlegt — gehe zu Einstellungen → Personen.</div>`;
+    return;
+  }
+  el.innerHTML = state.splitMembers.map(name => `
+    <label class="split-member-item">
+      <input type="checkbox" class="split-member-cb" data-name="${esc(name)}"
+        ${selectedSplitMembers.includes(name) ? 'checked' : ''}>
+      <span>${esc(name)}</span>
+    </label>`).join('');
+  el.querySelectorAll('.split-member-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) { if (!selectedSplitMembers.includes(cb.dataset.name)) selectedSplitMembers.push(cb.dataset.name); }
+      else { selectedSplitMembers = selectedSplitMembers.filter(n => n !== cb.dataset.name); }
+      updateSplitPreview();
+    });
+  });
+}
+
+function updateSplitPreview() {
+  const el = document.getElementById('split-preview');
+  if (!el) return;
+  if (!splitEnabled || selectedSplitMembers.length === 0) { el.textContent = ''; return; }
+  const raw = document.getElementById('amount-input').value.replace(',', '.').trim();
+  const amount = parseFloat(raw) || 0;
+  const total = selectedSplitMembers.length + 1; // +1 for me
+  const myShare = amount / total;
+  el.innerHTML = `<span class="split-preview-label">Mein Anteil:</span> <span class="split-preview-amount">${fmt(myShare)}</span> <span class="split-preview-sub">(÷${total})</span>`;
+}
+
+function calcSettlement() {
+  // Returns { memberName: totalOwed } for all unsettled splits
+  const b = currentBudget();
+  if (!b) return {};
+  const balances = {};
+  b.expenses.forEach(e => {
+    if (!e.split?.enabled) return;
+    e.split.members.forEach(name => {
+      if (!e.split.settled?.[name]) {
+        balances[name] = (balances[name] || 0) + e.split.perShare;
+      }
+    });
+  });
+  return balances;
+}
+
+function settleAll(memberName) {
+  const b = currentBudget();
+  if (!b) return;
+  b.expenses.forEach(e => {
+    if (!e.split?.enabled) return;
+    if (e.split.members.includes(memberName)) {
+      if (!e.split.settled) e.split.settled = {};
+      e.split.settled[memberName] = true;
+    }
+  });
+  save();
+  renderHome();
+}
+
+function renderSettlement() {
+  const sec = document.getElementById('settlement-section');
+  if (!sec) return;
+  const balances = calcSettlement();
+  const entries = Object.entries(balances).filter(([, v]) => v > 0);
+  if (entries.length === 0) { sec.classList.add('hidden'); return; }
+  sec.classList.remove('hidden');
+  const list = document.getElementById('settlement-list');
+  list.innerHTML = entries.map(([name, amount]) => `
+    <div class="settlement-row">
+      <div class="settlement-avatar">${name.charAt(0).toUpperCase()}</div>
+      <div class="settlement-info">
+        <span class="settlement-name">${esc(name)}</span>
+        <span class="settlement-sub">schuldet dir</span>
+      </div>
+      <span class="settlement-amount">${fmt(amount)}</span>
+      <button class="settle-btn" data-name="${esc(name)}">✓ Beglichen</button>
+    </div>`).join('');
+  list.querySelectorAll('.settle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (confirm(`Alle offenen Beträge von ${btn.dataset.name} als beglichen markieren?`)) {
+        settleAll(btn.dataset.name);
+      }
+    });
+  });
+}
+
+// ── Split Members (Settings) ──────────────────────────────────────
+function renderSplitMembersSettings() {
+  const el = document.getElementById('split-members-settings');
+  if (!el) return;
+  if (state.splitMembers.length === 0) {
+    el.innerHTML = '<div style="padding:12px 16px;font-size:13px;color:var(--muted)">Noch keine Personen hinzugefügt.</div>';
+  } else {
+    el.innerHTML = state.splitMembers.map(name => `
+      <div class="cat-manage-chip">
+        <span class="split-settings-avatar">${name.charAt(0).toUpperCase()}</span>
+        <span>${esc(name)}</span>
+        <button class="cat-remove-btn" data-name="${esc(name)}">✕</button>
+      </div>`).join('');
+    el.querySelectorAll('.cat-remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.splitMembers = state.splitMembers.filter(n => n !== btn.dataset.name);
+        save(); renderSplitMembersSettings();
+      });
+    });
+  }
+}
+
+function addSplitMember() {
+  const input = document.getElementById('new-split-member');
+  const name = input.value.trim();
+  if (!name) { showToast('Bitte gib einen Namen ein'); return; }
+  if (state.splitMembers.includes(name)) { showToast('Person bereits vorhanden'); return; }
+  state.splitMembers.push(name);
+  save();
+  input.value = '';
+  renderSplitMembersSettings();
+  showToast(`"${name}" hinzugefügt`);
+}
+
 // ── Navigation ───────────────────────────────────────────────────
 function showView(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -316,6 +455,7 @@ function renderHome() {
   document.getElementById('summary-count').textContent = `${moAll.length} Buchung${moAll.length !== 1 ? 'en' : ''}`;
 
   renderCategoryBreakdown(moAll);
+  renderSettlement();
   renderQuickCats();
 
   const recentLabel = document.getElementById('recent-label');
@@ -355,11 +495,17 @@ function expenseHTML(e) {
   const isIncome = e.type === 'income';
   const iconBg = isIncome ? '#D1FAE5' : getCatColor(e.category);
   const amountStr = (isIncome ? '+' : '') + fmt(e.amount);
+  const hasSplit = e.split?.enabled && e.split.members?.length > 0;
+  const splitBadge = hasSplit
+    ? `<span class="split-badge">÷${e.split.members.length + 1}</span>` : '';
+  const splitShareLine = hasSplit
+    ? `<div class="expense-split-share">Mein Anteil: ${fmt(e.split.perShare)}</div>` : '';
   return `<div class="expense-item" data-id="${e.id}">
     <div class="expense-icon" style="background:${iconBg}">${c.emoji}</div>
     <div class="expense-info">
-      <div class="expense-cat">${esc(e.category)}</div>
+      <div class="expense-cat">${esc(e.category)}${splitBadge}</div>
       ${e.note ? `<div class="expense-note">${esc(e.note)}</div>` : ''}
+      ${splitShareLine}
     </div>
     <div class="expense-right">
       <div class="expense-amount${isIncome ? ' income-amount' : ''}">${amountStr}</div>
@@ -506,6 +652,7 @@ function renderHistory() {
 // ── Render: Settings ─────────────────────────────────────────────
 function renderSettings() {
   renderSettingsBudgets();
+  renderSplitMembersSettings();
   renderCatManagement();
   renderIncomeCatManagement();
   // Sync dark mode toggle
@@ -588,10 +735,19 @@ function renderAll() { renderHome(); renderHistory(); renderSettings(); renderSt
 function openAddModal(preselect = null, preType = null) {
   selectedCategory = preselect;
   selectedType = preType || 'expense';
+  splitEnabled = false;
+  selectedSplitMembers = [];
   document.getElementById('amount-input').value = '';
   document.getElementById('note-input').value = '';
   document.getElementById('date-input').value = todayStr();
   document.getElementById('voice-status').textContent = '';
+  // Reset split toggle
+  const splitToggle = document.getElementById('split-toggle');
+  if (splitToggle) splitToggle.checked = false;
+  const splitSec = document.getElementById('split-section');
+  if (splitSec) splitSec.classList.add('hidden');
+  const splitPreview = document.getElementById('split-preview');
+  if (splitPreview) splitPreview.textContent = '';
   setTypeToggle(selectedType);
   renderCatPills(preselect);
   document.getElementById('modal-add').classList.remove('hidden');
@@ -647,7 +803,17 @@ function saveExpense() {
 
   const note = document.getElementById('note-input').value.trim();
   const date = document.getElementById('date-input').value || todayStr();
-  addExpense({ amount, category: selectedCategory, note, date, type: selectedType });
+
+  let splitData = null;
+  if (splitEnabled && selectedSplitMembers.length > 0 && selectedType === 'expense') {
+    const total = selectedSplitMembers.length + 1;
+    const perShare = Math.round((amount / total) * 100) / 100;
+    const settled = {};
+    selectedSplitMembers.forEach(n => { settled[n] = false; });
+    splitData = { enabled: true, members: [...selectedSplitMembers], perShare, settled };
+  }
+
+  addExpense({ amount, category: selectedCategory, note, date, type: selectedType, split: splitData });
   closeAddModal();
   renderAll();
   const label = selectedType === 'income' ? 'Einnahme' : 'Ausgabe';
@@ -913,6 +1079,7 @@ function initEvents() {
   document.getElementById('voice-btn').addEventListener('click', toggleVoice);
   document.getElementById('save-btn').addEventListener('click', saveExpense);
   document.getElementById('amount-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveExpense(); });
+  document.getElementById('amount-input').addEventListener('input', updateSplitPreview);
 
   document.getElementById('detail-del-btn').addEventListener('click', () => {
     const id = document.getElementById('detail-del-btn').dataset.id;
@@ -939,6 +1106,13 @@ function initEvents() {
 
   // Dark mode toggle
   document.getElementById('dark-mode-toggle').addEventListener('change', toggleDarkMode);
+
+  // Split toggle
+  document.getElementById('split-toggle').addEventListener('change', toggleSplitSection);
+
+  // Split members (settings)
+  document.getElementById('add-split-member-btn').addEventListener('click', addSplitMember);
+  document.getElementById('new-split-member').addEventListener('keydown', e => { if (e.key === 'Enter') addSplitMember(); });
 }
 
 // ── Init ──────────────────────────────────────────────────────────
