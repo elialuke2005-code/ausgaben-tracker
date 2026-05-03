@@ -142,10 +142,11 @@ function load() {
 }
 
 async function loadFromFirestore(uid) {
+  let isNewUser = false;
   try {
     const doc = await db.collection('users').doc(uid).get();
     if (doc.exists) {
-      const { darkMode: dm, accentColor: ac, updatedAt, ...stateData } = doc.data();
+      const { darkMode: dm, accentColor: ac, updatedAt, userName, ...stateData } = doc.data();
       state = { ...state, ...stateData };
       migrateState();
       if (dm !== undefined) {
@@ -161,8 +162,14 @@ async function loadFromFirestore(uid) {
         setAccentColor(ac);
       }
       localStorage.setItem('ausgaben_v2', JSON.stringify(state));
+      // Gespeicherten Namen anwenden
+      const user = auth.currentUser;
+      customUserName = userName || null;
+      applyUserName(customUserName || (user && user.displayName) || null);
+      // Name-Dialog zeigen wenn noch keiner gesetzt ist
+      if (!userName && !(user && user.displayName)) showNameModal(true);
     } else {
-      // Erster Login – vorhandene localStorage-Daten in Firestore übertragen
+      isNewUser = true;
       save();
     }
   } catch(e) {}
@@ -170,6 +177,7 @@ async function loadFromFirestore(uid) {
   if (!state.budgets.find(b => b.id === state.currentBudgetId))
     state.currentBudgetId = state.budgets[0].id;
   renderAll();
+  if (isNewUser) showNameModal(true);
 }
 
 // ── Firebase Auth ─────────────────────────────────────────────────
@@ -181,17 +189,29 @@ function hideAuthOverlay() {
   document.getElementById('auth-overlay').classList.add('hidden');
 }
 
+let customUserName = null; // Benutzerdefinierter Name aus Firestore
+
+function applyUserName(name) {
+  customUserName = name || null;
+  const user = typeof auth !== 'undefined' && auth.currentUser;
+  const displayName = name || (user && user.displayName) || null;
+  const firstName   = displayName ? displayName.split(' ')[0] : null;
+
+  const nameEl  = document.getElementById('user-name');
+  const greeting = document.querySelector('.header-greeting');
+  if (nameEl)   nameEl.textContent  = displayName || 'Kein Name';
+  if (greeting) greeting.textContent = firstName ? `Hallo, ${firstName} 👋` : 'Hallo 👋';
+}
+
 function updateUserHeader(user) {
   const accountBlock = document.getElementById('account-block');
   const infoBlock    = document.getElementById('info-block');
   if (accountBlock) accountBlock.style.display = '';
   if (infoBlock)    infoBlock.style.display = 'none';
 
-  const nameEl   = document.getElementById('user-name');
   const emailEl  = document.getElementById('user-email');
   const avatarEl = document.getElementById('user-avatar');
   const fallback = document.getElementById('user-avatar-fallback');
-  if (nameEl)  nameEl.textContent  = user.displayName || 'Kein Name';
   if (emailEl) emailEl.textContent = user.email || '';
   if (user.photoURL && avatarEl) {
     avatarEl.src = user.photoURL;
@@ -199,9 +219,43 @@ function updateUserHeader(user) {
     if (fallback) fallback.style.display = 'none';
   }
 
-  const firstName = user.displayName ? user.displayName.split(' ')[0] : null;
-  const greeting  = document.querySelector('.header-greeting');
-  if (greeting) greeting.textContent = firstName ? `Hallo, ${firstName} 👋` : 'Hallo 👋';
+  applyUserName(customUserName);
+}
+
+function showNameModal(isFirstTime = false) {
+  const modal   = document.getElementById('modal-name');
+  const title   = document.getElementById('name-modal-title');
+  const desc    = document.getElementById('name-modal-desc');
+  const input   = document.getElementById('name-input');
+  const closeBtn = document.getElementById('name-modal-close-btn');
+  title.textContent = isFirstTime ? 'Wie heißt du?' : 'Name ändern';
+  desc.textContent  = isFirstTime
+    ? 'So personalisieren wir deinen Ausgaben-Tracker.'
+    : 'Gib deinen neuen Namen ein.';
+  closeBtn.style.display = isFirstTime ? 'none' : '';
+  input.value = customUserName || '';
+  document.getElementById('name-error').textContent = '';
+  modal.classList.remove('hidden');
+  setTimeout(() => input.focus(), 100);
+}
+
+function closeNameModal() {
+  document.getElementById('modal-name').classList.add('hidden');
+}
+
+async function saveUserName() {
+  const input = document.getElementById('name-input');
+  const name  = input.value.trim();
+  if (!name) { document.getElementById('name-error').textContent = 'Bitte gib einen Namen ein.'; return; }
+  const user = typeof auth !== 'undefined' && auth.currentUser;
+  if (user) {
+    try {
+      await db.collection('users').doc(user.uid).update({ userName: name });
+    } catch(e) {}
+  }
+  applyUserName(name);
+  closeNameModal();
+  showToast('Name gespeichert');
 }
 
 function clearUserHeader() {
@@ -1523,6 +1577,12 @@ function init() {
       auth.signOut().then(() => showToast('Abgemeldet'));
     }
   });
+
+  // Name-Modal
+  document.getElementById('name-save-btn').addEventListener('click', saveUserName);
+  document.getElementById('name-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveUserName(); });
+  document.getElementById('name-modal-close-btn').addEventListener('click', closeNameModal);
+  document.getElementById('change-name-btn')?.addEventListener('click', () => showNameModal(false));
 
   if ('serviceWorker' in navigator)
     navigator.serviceWorker.register('./sw.js').catch(() => {});

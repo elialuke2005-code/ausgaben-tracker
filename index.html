@@ -200,6 +200,10 @@
             <div id="user-email" style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
           </div>
         </div>
+        <div class="settings-row" id="change-name-btn">
+          <span class="settings-row-icon">✏️</span>
+          <span class="settings-row-text">Name ändern</span>
+        </div>
         <div class="settings-row" id="signout-btn">
           <span class="settings-row-icon">🚪</span>
           <span class="settings-row-text" style="color:#EF4444;">Abmelden</span>
@@ -434,6 +438,25 @@
     <p class="auth-skip-hint">
       <button id="auth-skip-btn" class="auth-skip-btn">Ohne Konto fortfahren (nur lokal)</button>
     </p>
+  </div>
+</div>
+
+<!-- ── Modal: Name eingeben ────────────────────────────────────── -->
+<div id="modal-name" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="name-modal-title">Wie heißt du?</div>
+      <button id="name-modal-close-btn" class="modal-close-btn">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="name-modal-desc" style="font-size:14px;color:var(--muted);margin:0 0 16px;">So personalisieren wir deinen Ausgaben-Tracker.</p>
+      <input type="text" id="name-input" class="auth-input" placeholder="Dein Name" autocomplete="name" maxlength="40">
+      <div id="name-error" class="auth-error" style="margin-top:8px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button id="name-save-btn" class="save-btn">Speichern</button>
+    </div>
   </div>
 </div>
 
