@@ -1488,6 +1488,31 @@ body.dark .settle-btn-owe { background: rgba(239,68,68,0.2); color: #F87171; }
 /* ── Utility ────────────────────────────────── */
 .hidden { display: none !important; }
 
+/* ── Recurring Payments ─────────────────────── */
+.recurring-row { align-items: center; }
+
+.icon-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+  transition: background 0.12s;
+  line-height: 1;
+}
+.icon-btn:hover { background: var(--border); }
+
+.recurring-day-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.recurring-day-hint {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* ── Auth Overlay ───────────────────────────── */
 .auth-overlay {
   position: fixed;

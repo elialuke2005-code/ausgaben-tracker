@@ -66,6 +66,7 @@ let state = {
   categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
   incomeCategories: JSON.parse(JSON.stringify(DEFAULT_INCOME_CATEGORIES)),
   splitMembers: [],
+  recurringPayments: [],
 };
 
 let selectedCategory = null;
@@ -126,6 +127,7 @@ function migrateState() {
     state.incomeCategories = JSON.parse(JSON.stringify(DEFAULT_INCOME_CATEGORIES));
   state.categories = state.categories.filter(c => c.name !== 'Gehalt');
   if (!state.splitMembers) state.splitMembers = [];
+  if (!state.recurringPayments) state.recurringPayments = [];
 }
 
 function load() {
@@ -467,6 +469,160 @@ function deleteBudget(id) {
 }
 
 function switchBudget(id) { state.currentBudgetId = id; save(); }
+
+// ── Recurring Payments ───────────────────────────────────────────
+let recurringEditId   = null;
+let recurringTypeMode = 'expense';
+let recurringSelectedCat = null;
+
+function processRecurringPayments() {
+  if (!state.recurringPayments || state.recurringPayments.length === 0) return;
+  const today = new Date();
+  const currentDay   = today.getDate();
+  const currentMonth = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+  let addedNames = [];
+
+  state.recurringPayments.forEach(rp => {
+    if (!rp.active) return;
+    if (currentDay < rp.dayOfMonth) return;
+    const lastMonth = rp.lastProcessed ? rp.lastProcessed.slice(0, 7) : '';
+    if (lastMonth === currentMonth) return;
+
+    const dayStr = String(rp.dayOfMonth).padStart(2, '0');
+    addExpense({
+      amount: rp.amount,
+      category: rp.category,
+      type: rp.type,
+      note: rp.note || rp.name,
+      date: `${currentMonth}-${dayStr}`,
+      recurringId: rp.id,
+    });
+    rp.lastProcessed = `${currentMonth}-${dayStr}`;
+    addedNames.push(rp.name);
+  });
+
+  if (addedNames.length > 0) {
+    save();
+    renderAll();
+    showToast(`✅ ${addedNames.length} Dauerauftrag/-aufträge erfasst`);
+  }
+}
+
+function renderRecurringSettings() {
+  const el = document.getElementById('recurring-list');
+  if (!el) return;
+  if (!state.recurringPayments || state.recurringPayments.length === 0) {
+    el.innerHTML = '<div style="padding:8px 16px;font-size:13px;color:var(--muted);">Noch keine Daueraufträge</div>';
+    return;
+  }
+  el.innerHTML = state.recurringPayments.map(rp => {
+    const sign = rp.type === 'income' ? '+' : '-';
+    const color = rp.type === 'income' ? 'var(--income)' : 'var(--danger)';
+    const suffix = rp.dayOfMonth === 1 ? 'sten' : rp.dayOfMonth === 2 ? 'ten' : rp.dayOfMonth === 3 ? 'ten' : '.';
+    return `
+    <div class="settings-row recurring-row" style="cursor:default;flex-wrap:wrap;gap:4px;">
+      <span class="settings-row-icon">${rp.catEmoji || '🔁'}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:14px;">${esc(rp.name)}</div>
+        <div style="font-size:12px;color:var(--muted);">Am ${rp.dayOfMonth}. jeden Monats</div>
+      </div>
+      <span style="font-weight:700;color:${color};font-size:15px;white-space:nowrap;">${sign}${fmt(rp.amount)}</span>
+      <div style="display:flex;gap:6px;margin-left:4px;">
+        <button class="recurring-edit-btn icon-btn" data-id="${rp.id}" title="Bearbeiten">✏️</button>
+        <button class="recurring-del-btn  icon-btn" data-id="${rp.id}" title="Löschen">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.recurring-edit-btn').forEach(btn =>
+    btn.addEventListener('click', () => openRecurringModal(btn.dataset.id)));
+  el.querySelectorAll('.recurring-del-btn').forEach(btn =>
+    btn.addEventListener('click', () => deleteRecurring(btn.dataset.id)));
+}
+
+function openRecurringModal(id = null) {
+  recurringEditId = id;
+  const rp = id ? state.recurringPayments.find(r => r.id === id) : null;
+
+  document.getElementById('recurring-modal-title').textContent = id ? 'Dauerauftrag bearbeiten' : 'Neuer Dauerauftrag';
+  document.getElementById('recurring-name').value   = rp ? rp.name   : '';
+  document.getElementById('recurring-amount').value = rp ? String(rp.amount).replace('.', ',') : '';
+  document.getElementById('recurring-day').value    = rp ? rp.dayOfMonth : 1;
+  document.getElementById('recurring-note').value   = rp ? (rp.note || '') : '';
+
+  recurringTypeMode    = rp ? rp.type : 'expense';
+  recurringSelectedCat = rp ? rp.category : null;
+  updateRecurringTypeBtns();
+  renderRecurringCatPills();
+
+  document.getElementById('modal-recurring').classList.remove('hidden');
+}
+
+function closeRecurringModal() {
+  document.getElementById('modal-recurring').classList.add('hidden');
+}
+
+function updateRecurringTypeBtns() {
+  document.getElementById('recurring-type-expense-btn').classList.toggle('active', recurringTypeMode === 'expense');
+  document.getElementById('recurring-type-income-btn').classList.toggle('active',  recurringTypeMode === 'income');
+  renderRecurringCatPills();
+}
+
+function renderRecurringCatPills() {
+  const cats = recurringTypeMode === 'income' ? state.incomeCategories : state.categories;
+  const el   = document.getElementById('recurring-cat-pills');
+  if (!el) return;
+  el.innerHTML = cats.map(c => `
+    <button class="cat-pill ${recurringSelectedCat === c.name ? 'selected' : ''}" data-cat="${esc(c.name)}">
+      <span>${c.emoji}</span><span>${esc(c.name)}</span>
+    </button>`).join('');
+  el.querySelectorAll('.cat-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      recurringSelectedCat = btn.dataset.cat;
+      renderRecurringCatPills();
+    });
+  });
+}
+
+function saveRecurring() {
+  const name   = document.getElementById('recurring-name').value.trim();
+  const amtRaw = document.getElementById('recurring-amount').value.replace(',', '.');
+  const amount = parseFloat(amtRaw);
+  const day    = parseInt(document.getElementById('recurring-day').value, 10);
+  const note   = document.getElementById('recurring-note').value.trim();
+
+  if (!name)              { showToast('Bitte Bezeichnung eingeben'); return; }
+  if (isNaN(amount) || amount <= 0) { showToast('Bitte gültigen Betrag eingeben'); return; }
+  if (isNaN(day) || day < 1 || day > 28) { showToast('Tag muss zwischen 1 und 28 liegen'); return; }
+  if (!recurringSelectedCat)  { showToast('Bitte Kategorie wählen'); return; }
+
+  const cats = recurringTypeMode === 'income' ? state.incomeCategories : state.categories;
+  const catObj = cats.find(c => c.name === recurringSelectedCat) || { emoji: '🔁' };
+
+  if (recurringEditId) {
+    const rp = state.recurringPayments.find(r => r.id === recurringEditId);
+    if (rp) Object.assign(rp, { name, amount, type: recurringTypeMode, category: recurringSelectedCat, catEmoji: catObj.emoji, dayOfMonth: day, note, active: true });
+  } else {
+    state.recurringPayments.push({
+      id: uid(), name, amount, type: recurringTypeMode,
+      category: recurringSelectedCat, catEmoji: catObj.emoji,
+      dayOfMonth: day, note, active: true, lastProcessed: null,
+    });
+  }
+
+  save();
+  renderRecurringSettings();
+  closeRecurringModal();
+  showToast(recurringEditId ? 'Dauerauftrag aktualisiert' : 'Dauerauftrag gespeichert');
+}
+
+function deleteRecurring(id) {
+  if (!confirm('Dauerauftrag wirklich löschen?')) return;
+  state.recurringPayments = state.recurringPayments.filter(r => r.id !== id);
+  save();
+  renderRecurringSettings();
+  showToast('Dauerauftrag gelöscht');
+}
 
 // ── Expense Ops ──────────────────────────────────────────────────
 function addExpense(data) {
@@ -1024,6 +1180,7 @@ function renderSettings() {
   renderSettingsBudgets();
   renderSplitMembersSettings();
   renderCatManagement();
+  renderRecurringSettings();
   renderIncomeCatManagement();
   // Sync dark mode toggle
   const toggle = document.getElementById('dark-mode-toggle');
@@ -1543,6 +1700,13 @@ function initEvents() {
   document.getElementById('add-icat-btn').addEventListener('click', addIncomeCategory);
   document.getElementById('new-icat-name').addEventListener('keydown', e => { if (e.key === 'Enter') addIncomeCategory(); });
 
+  // Wiederkehrende Zahlungen
+  document.getElementById('add-recurring-btn').addEventListener('click', () => openRecurringModal());
+  document.getElementById('recurring-close-btn').addEventListener('click', closeRecurringModal);
+  document.getElementById('recurring-save-btn').addEventListener('click', saveRecurring);
+  document.getElementById('recurring-type-expense-btn').addEventListener('click', () => { recurringTypeMode = 'expense'; recurringSelectedCat = null; updateRecurringTypeBtns(); });
+  document.getElementById('recurring-type-income-btn').addEventListener('click',  () => { recurringTypeMode = 'income';  recurringSelectedCat = null; updateRecurringTypeBtns(); });
+
   // Dark mode toggle
   document.getElementById('dark-mode-toggle').addEventListener('change', toggleDarkMode);
 
@@ -1567,6 +1731,7 @@ function init() {
     state.currentBudgetId = state.budgets[0].id;
 
   initVoice();
+  processRecurringPayments();
   renderAll();
   initEvents();
   initAuth();
