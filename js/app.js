@@ -1347,54 +1347,64 @@ function clearPhoto() {
   setScanStatus('');
 }
 
-function initPhotoEvents() {
-  const input = document.getElementById('photo-input');
-  if (!input) return;
+async function runOCR(base64) {
+  setScanStatus('⏳ Lädt OCR-Engine …');
+  try {
+    await loadTesseract();
+    setScanStatus('🔍 Erkenne Text …');
+    const result = await Tesseract.recognize(base64, 'deu+eng');
+    const amount = parseAmountFromOCR(result.data.text);
+    if (amount !== null) {
+      const formatted = String(amount.toFixed(2)).replace('.', ',');
+      document.getElementById('amount-input').value = formatted;
+      setScanStatus(`✅ Betrag erkannt: ${formatted} €`);
+      updateSplitPreview();
+    } else {
+      setScanStatus('Kein Betrag gefunden – bitte manuell eingeben.', true);
+    }
+  } catch {
+    setScanStatus('Fehler beim Scannen.', true);
+  }
+}
 
-  input.addEventListener('change', async () => {
-    const file = input.files[0];
+function initPhotoEvents() {
+  if (!document.getElementById('photo-input')) return;
+
+  // Foto anheften (nur Vorschau, kein Scan)
+  document.getElementById('photo-input').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setScanStatus('Bild wird vorbereitet …');
+    showPhotoPreview(await compressImage(file));
+    setScanStatus('');
+  });
+
+  // Kamera scannen
+  document.getElementById('photo-scan-btn').addEventListener('click', () => {
+    if (currentPhotoBase64) { runOCR(currentPhotoBase64); return; }
+    document.getElementById('scan-input-cam').click();
+  });
+  document.getElementById('scan-input-cam').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const b64 = await compressImage(file);
+    showPhotoPreview(b64);
+    await runOCR(b64);
+    e.target.value = '';
+  });
+
+  // Galerie scannen (Screenshots etc.)
+  document.getElementById('scan-input-gallery').addEventListener('change', async e => {
+    const file = e.target.files[0];
     if (!file) return;
     setScanStatus('Bild wird vorbereitet …');
     const b64 = await compressImage(file);
     showPhotoPreview(b64);
-    setScanStatus('');
+    await runOCR(b64);
+    e.target.value = '';
   });
 
   document.getElementById('photo-remove-btn')?.addEventListener('click', clearPhoto);
-
-  document.getElementById('photo-scan-btn')?.addEventListener('click', async () => {
-    // Wenn noch kein Foto vorhanden → Kamera öffnen
-    if (!currentPhotoBase64) {
-      document.getElementById('photo-input').click();
-      // Warte bis Foto ausgewählt, dann scannen
-      const waitForPhoto = () => new Promise(resolve => {
-        const check = setInterval(() => {
-          if (currentPhotoBase64) { clearInterval(check); resolve(); }
-        }, 300);
-        setTimeout(() => { clearInterval(check); resolve(); }, 15000);
-      });
-      await waitForPhoto();
-      if (!currentPhotoBase64) return;
-    }
-
-    setScanStatus('⏳ Lädt OCR-Engine …');
-    try {
-      await loadTesseract();
-      setScanStatus('🔍 Erkenne Text …');
-      const result = await Tesseract.recognize(currentPhotoBase64, 'deu+eng');
-      const amount = parseAmountFromOCR(result.data.text);
-      if (amount !== null) {
-        const formatted = String(amount.toFixed(2)).replace('.', ',');
-        document.getElementById('amount-input').value = formatted;
-        setScanStatus(`✅ Betrag erkannt: ${formatted} €`);
-        updateSplitPreview();
-      } else {
-        setScanStatus('Kein Betrag gefunden – bitte manuell eingeben.', true);
-      }
-    } catch (e) {
-      setScanStatus('Fehler beim Scannen.', true);
-    }
-  });
 }
 
 // ── Render: Settings ─────────────────────────────────────────────
