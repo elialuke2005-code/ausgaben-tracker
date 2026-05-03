@@ -1176,6 +1176,101 @@ function renderHistory() {
   bindExpenseClicks(el);
 }
 
+// ── Support ───────────────────────────────────────────────────────
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/DEINE_FORM_ID'; // ← nach Setup ersetzen
+let supportType = 'bug';
+
+function openSupportModal(type = 'bug') {
+  supportType = type;
+  document.getElementById('support-modal-title').textContent =
+    type === 'bug' ? '🐛 Fehler melden' :
+    type === 'idea' ? '💡 Idee einreichen' :
+    type === 'praise' ? '⭐ Lob & Feedback' : '📝 Nachricht senden';
+
+  document.querySelectorAll('.support-type-pill').forEach(p =>
+    p.classList.toggle('active', p.dataset.type === type));
+
+  document.getElementById('support-message').value = '';
+  document.getElementById('support-status').textContent = '';
+  document.getElementById('support-status').className = 'support-status';
+
+  // E-Mail vorausfüllen wenn eingeloggt
+  const user = typeof auth !== 'undefined' && auth.currentUser;
+  document.getElementById('support-email').value = user?.email || '';
+
+  document.getElementById('modal-support').classList.remove('hidden');
+  setTimeout(() => document.getElementById('support-message').focus(), 150);
+}
+
+function closeSupportModal() {
+  document.getElementById('modal-support').classList.add('hidden');
+}
+
+async function sendSupport() {
+  const message = document.getElementById('support-message').value.trim();
+  const email   = document.getElementById('support-email').value.trim();
+  const statusEl = document.getElementById('support-status');
+
+  if (!message) {
+    statusEl.textContent = 'Bitte gib eine Nachricht ein.';
+    statusEl.className = 'support-status support-status--error';
+    return;
+  }
+
+  const btn = document.getElementById('support-send-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Wird gesendet …';
+  statusEl.textContent = '';
+
+  const typeLabel = { bug: 'Fehlermeldung', idea: 'Verbesserungsidee', praise: 'Lob & Feedback', other: 'Sonstiges' }[supportType] || supportType;
+  const user = typeof auth !== 'undefined' && auth.currentUser;
+
+  try {
+    const res = await fetch(FORMSPREE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        typ:       typeLabel,
+        nachricht: message,
+        antwort_email: email || 'Keine Angabe',
+        nutzer:    customUserName || user?.displayName || 'Nicht angemeldet',
+        nutzer_email: user?.email || 'Nicht angemeldet',
+      }),
+    });
+
+    if (res.ok) {
+      statusEl.textContent = '✅ Gesendet! Danke für dein Feedback.';
+      statusEl.className = 'support-status support-status--ok';
+      document.getElementById('support-message').value = '';
+      setTimeout(closeSupportModal, 1800);
+    } else {
+      throw new Error('Fehler');
+    }
+  } catch {
+    statusEl.textContent = '❌ Senden fehlgeschlagen. Bitte versuche es später erneut.';
+    statusEl.className = 'support-status support-status--error';
+  }
+
+  btn.disabled = false;
+  btn.textContent = '📤 Absenden';
+}
+
+function initSupportEvents() {
+  document.getElementById('support-close-btn').addEventListener('click', closeSupportModal);
+  document.getElementById('support-send-btn').addEventListener('click', sendSupport);
+
+  document.getElementById('open-support-btn').addEventListener('click',  () => openSupportModal('bug'));
+  document.getElementById('open-feedback-btn').addEventListener('click', () => openSupportModal('idea'));
+  document.getElementById('open-praise-btn').addEventListener('click',   () => openSupportModal('praise'));
+
+  document.querySelectorAll('.support-type-pill').forEach(p =>
+    p.addEventListener('click', () => {
+      supportType = p.dataset.type;
+      document.querySelectorAll('.support-type-pill').forEach(x => x.classList.remove('active'));
+      p.classList.add('active');
+    }));
+}
+
 // ── Foto & OCR ───────────────────────────────────────────────────
 let currentPhotoBase64 = null;
 
@@ -1939,6 +2034,7 @@ function init() {
 
   initVoice();
   initPhotoEvents();
+  initSupportEvents();
   processRecurringPayments();
   renderAll();
   initEvents();

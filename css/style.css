@@ -1489,6 +1489,54 @@ body.dark .settle-btn-owe { background: rgba(239,68,68,0.2); color: #F87171; }
 /* ── Utility ────────────────────────────────── */
 .hidden { display: none !important; }
 
+/* ── Support Modal ──────────────────────────── */
+.support-type-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.support-type-pill {
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.support-type-pill.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.support-textarea {
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+  min-height: 100px;
+}
+.support-textarea:focus { border-color: var(--primary); }
+
+.support-status {
+  margin-top: 10px;
+  font-size: 13px;
+  min-height: 18px;
+  font-weight: 500;
+}
+.support-status--ok    { color: var(--income); }
+.support-status--error { color: var(--danger); }
+
 /* ── Foto & OCR ─────────────────────────────── */
 .photo-section {
   margin-top: 16px;

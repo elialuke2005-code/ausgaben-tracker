@@ -232,6 +232,27 @@
         </div>
       </div>
 
+      <!-- Support -->
+      <div class="settings-block">
+        <div class="settings-block-title">Support</div>
+        <div class="settings-row" id="open-support-btn">
+          <span class="settings-row-icon">🐛</span>
+          <span class="settings-row-text">Fehler melden</span>
+        </div>
+        <div class="settings-row" id="open-feedback-btn">
+          <span class="settings-row-icon">💡</span>
+          <span class="settings-row-text">Verbesserung vorschlagen</span>
+        </div>
+        <div class="settings-row" id="open-praise-btn">
+          <span class="settings-row-icon">⭐</span>
+          <span class="settings-row-text">Lob &amp; Feedback</span>
+        </div>
+        <div class="settings-row" style="cursor:default;">
+          <span class="settings-row-icon">📧</span>
+          <span class="settings-row-text" style="font-size:12px;color:var(--muted);">Powered by Weinheimer-IT</span>
+        </div>
+      </div>
+
     </section>
   </main>
 
@@ -494,6 +515,39 @@
 
     <!-- Footer Branding -->
     <div class="auth-footer">© 2026 Weinheimer-IT</div>
+  </div>
+</div>
+
+<!-- ── Modal: Support ─────────────────────────────────────────── -->
+<div id="modal-support" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="support-modal-title">Feedback senden</div>
+      <button id="support-close-btn" class="modal-close-btn">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="field-label">Typ</div>
+      <div class="support-type-pills">
+        <button class="support-type-pill active" data-type="bug">🐛 Fehler</button>
+        <button class="support-type-pill" data-type="idea">💡 Idee</button>
+        <button class="support-type-pill" data-type="praise">⭐ Lob</button>
+        <button class="support-type-pill" data-type="other">📝 Sonstiges</button>
+      </div>
+
+      <div class="field-label" style="margin-top:16px;">Nachricht <span style="color:var(--danger);">*</span></div>
+      <textarea id="support-message" class="support-textarea" placeholder="Beschreibe dein Anliegen …" rows="5"></textarea>
+
+      <div class="field-label" style="margin-top:16px;">Deine E-Mail <span style="font-weight:400;text-transform:none;font-size:11px;">(optional, für Rückmeldung)</span></div>
+      <input type="email" id="support-email" class="auth-input" style="padding-left:14px;" placeholder="deine@email.de" autocomplete="email">
+
+      <div id="support-status" class="support-status"></div>
+
+    </div>
+    <div class="modal-footer">
+      <button id="support-send-btn" class="save-btn">📤 Absenden</button>
+    </div>
   </div>
 </div>
 
