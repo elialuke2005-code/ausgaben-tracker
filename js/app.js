@@ -1177,7 +1177,7 @@ function renderHistory() {
 }
 
 // ── Support ───────────────────────────────────────────────────────
-const FORMSPREE_ENDPOINT = 'https://formspree.io/f/DEINE_FORM_ID'; // ← nach Setup ersetzen
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mdabenyb';
 let supportType = 'bug';
 
 function openSupportModal(type = 'bug') {
