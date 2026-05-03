@@ -72,6 +72,7 @@ let state = {
 let selectedCategory = null;
 let selectedType = 'expense'; // for add modal
 let selectedPayment = null;   // 'cash' | 'card' | null
+let editingExpenseId = null;  // ID des zu bearbeitenden Eintrags
 let splitEnabled = false;
 let splitMode = 'ipaid';      // 'ipaid' | 'iowe'
 let selectedSplitMembers = [];
@@ -1451,8 +1452,49 @@ function openAddModal(preselect = null, preType = null) {
 function closeAddModal() {
   document.getElementById('modal-add').classList.add('hidden');
   stopVoice();
-  selectedCategory = null;
+  selectedCategory  = null;
+  editingExpenseId  = null;
   clearPhoto();
+}
+
+function openEditExpense(expenseId) {
+  const b = currentBudget();
+  const e = b.expenses.find(x => x.id === expenseId);
+  if (!e) return;
+
+  editingExpenseId = expenseId;
+
+  // Typ setzen
+  setTypeToggle(e.type || 'expense');
+
+  // Betrag
+  document.getElementById('amount-input').value = String(e.amount).replace('.', ',');
+
+  // Kategorie
+  selectedCategory = e.category;
+  renderCatPills(e.category);
+
+  // Zahlungsart
+  setPaymentMethod(e.payment || null);
+
+  // Notiz + Datum
+  document.getElementById('note-input').value  = e.note || '';
+  document.getElementById('date-input').value  = e.date || todayStr();
+
+  // Foto
+  if (e.photo) showPhotoPreview(e.photo);
+
+  // Titel
+  const title = document.querySelector('#modal-add .modal-title');
+  if (title) title.textContent = 'Eintrag bearbeiten';
+
+  // Split zurücksetzen (vereinfacht)
+  document.getElementById('split-toggle').checked = false;
+  splitEnabled = false;
+  document.getElementById('split-section').classList.add('hidden');
+
+  closeDetailModal();
+  document.getElementById('modal-add').classList.remove('hidden');
 }
 
 function setTypeToggle(type) {
@@ -1515,11 +1557,31 @@ function saveExpense() {
     }
   }
 
-  addExpense({ amount, category: selectedCategory, note, date, type: selectedType, payment: selectedPayment, split: splitData, photo: currentPhotoBase64 || null });
-  closeAddModal();
-  renderAll();
-  const label = selectedType === 'income' ? 'Einnahme' : 'Ausgabe';
-  showToast(`${label} ${fmt(amount)} gespeichert ✓`);
+  if (editingExpenseId) {
+    // Bestehenden Eintrag aktualisieren
+    const b = currentBudget();
+    const e = b.expenses.find(x => x.id === editingExpenseId);
+    if (e) {
+      e.amount   = amount;
+      e.category = selectedCategory;
+      e.note     = note;
+      e.date     = date;
+      e.type     = selectedType;
+      e.payment  = selectedPayment;
+      if (splitData) e.split = splitData;
+      if (currentPhotoBase64) e.photo = currentPhotoBase64;
+    }
+    save();
+    closeAddModal();
+    renderAll();
+    showToast('Eintrag aktualisiert ✓');
+  } else {
+    addExpense({ amount, category: selectedCategory, note, date, type: selectedType, payment: selectedPayment, split: splitData, photo: currentPhotoBase64 || null });
+    closeAddModal();
+    renderAll();
+    const label = selectedType === 'income' ? 'Einnahme' : 'Ausgabe';
+    showToast(`${label} ${fmt(amount)} gespeichert ✓`);
+  }
 }
 
 // ── Modal: Expense Detail ─────────────────────────────────────────
@@ -1569,7 +1631,8 @@ function openDetailModal(expenseId) {
     }
   }
 
-  document.getElementById('detail-del-btn').dataset.id = e.id;
+  document.getElementById('detail-del-btn').dataset.id  = e.id;
+  document.getElementById('detail-edit-btn').dataset.id = e.id;
   document.getElementById('modal-detail').classList.remove('hidden');
 }
 
@@ -1815,6 +1878,11 @@ function initEvents() {
   document.getElementById('save-btn').addEventListener('click', saveExpense);
   document.getElementById('amount-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveExpense(); });
   document.getElementById('amount-input').addEventListener('input', updateSplitPreview);
+
+  document.getElementById('detail-edit-btn').addEventListener('click', () => {
+    const id = document.getElementById('detail-edit-btn').dataset.id;
+    openEditExpense(id);
+  });
 
   document.getElementById('detail-del-btn').addEventListener('click', () => {
     const id = document.getElementById('detail-del-btn').dataset.id;
