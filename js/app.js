@@ -123,6 +123,7 @@ function save() {
 function migrateState() {
   state.budgets.forEach(b => {
     b.expenses.forEach(e => { if (!e.type) e.type = 'expense'; });
+    if (!b.mode) b.mode = 'monthly'; // bestehende Budgets → Monatsbudget
   });
   if (!state.incomeCategories || state.incomeCategories.length === 0)
     state.incomeCategories = JSON.parse(JSON.stringify(DEFAULT_INCOME_CATEGORIES));
@@ -454,8 +455,10 @@ function currentBudget() {
   return state.budgets.find(b => b.id === state.currentBudgetId) || state.budgets[0];
 }
 
-function createBudget(name) {
-  const b = { id: uid(), name, expenses: [] };
+let newBudgetMode = 'monthly';
+
+function createBudget(name, mode = 'monthly') {
+  const b = { id: uid(), name, mode, expenses: [] };
   state.budgets.push(b);
   state.currentBudgetId = b.id;
   save();
@@ -932,6 +935,7 @@ function renderHome() {
   const b = currentBudget();
   if (!b) return;
 
+  const isProject = b.mode === 'project';
   document.getElementById('current-budget-name').textContent = b.name;
 
   const MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
@@ -941,18 +945,26 @@ function renderHome() {
   const isCurrent = selectedMonth === currentMonthStr();
   const now = new Date();
 
+  // Monatsnavigation ein-/ausblenden je nach Budget-Typ
+  const monthNav = document.querySelector('.month-nav');
+  if (monthNav) monthNav.style.display = isProject ? 'none' : '';
+
   const headerDate = document.getElementById('header-date');
   if (headerDate) {
-    headerDate.textContent = isCurrent
-      ? `${WEEKDAYS[now.getDay()]}, ${now.getDate()}. ${monthName}`
-      : `${monthName} ${selY}`;
+    headerDate.textContent = isProject
+      ? `Projekt · ${b.expenses.length} Buchungen`
+      : isCurrent
+        ? `${WEEKDAYS[now.getDay()]}, ${now.getDate()}. ${monthName}`
+        : `${monthName} ${selY}`;
   }
 
-  document.getElementById('month-nav-label').textContent = `${monthName} ${selY}`;
-  document.getElementById('next-month-btn').disabled = isCurrent;
+  if (!isProject) {
+    document.getElementById('month-nav-label').textContent = `${monthName} ${selY}`;
+    document.getElementById('next-month-btn').disabled = isCurrent;
+  }
 
-  // Filter and compute
-  const moAll = b.expenses.filter(e => e.date.startsWith(selectedMonth));
+  // Einträge filtern: Projekt = alle, Monat = gefiltert
+  const moAll      = isProject ? b.expenses : b.expenses.filter(e => e.date.startsWith(selectedMonth));
   const moExpenses = moAll.filter(e => (e.type || 'expense') === 'expense');
   const moIncome   = moAll.filter(e => e.type === 'income');
   const totalExpense = moExpenses.reduce((s, e) => s + e.amount, 0);
@@ -977,10 +989,12 @@ function renderHome() {
 
   const recentLabel = document.getElementById('recent-label');
   const recentEl = document.getElementById('recent-list');
-  const toShow = isCurrent ? b.expenses.slice(0, 6) : moAll;
+  const toShow = isProject ? b.expenses : (isCurrent ? b.expenses.slice(0, 6) : moAll);
 
   if (recentLabel) {
-    recentLabel.textContent = isCurrent ? 'Letzte Buchungen' : `Alle Buchungen im ${monthName}`;
+    recentLabel.textContent = isProject
+      ? 'Alle Buchungen'
+      : isCurrent ? 'Letzte Buchungen' : `Alle Buchungen im ${monthName}`;
   }
 
   if (toShow.length === 0) {
@@ -1457,9 +1471,9 @@ function renderSettingsBudgets() {
   el.innerHTML = state.budgets.map(b => `
     <div class="settings-row ${b.id === state.currentBudgetId ? 'active-budget' : ''}"
          data-switch="${b.id}" style="cursor:pointer;">
-      <span class="settings-row-icon">💼</span>
+      <span class="settings-row-icon">${b.mode === 'project' ? '📁' : '📅'}</span>
       <span class="settings-row-text">${esc(b.name)}
-        <span style="font-size:12px;color:var(--muted);margin-left:6px;">${b.expenses.length} Einträge</span>
+        <span style="font-size:12px;color:var(--muted);margin-left:6px;">${b.mode === 'project' ? 'Projekt · ' : ''}${b.expenses.length} Einträge</span>
       </span>
       ${b.id === state.currentBudgetId ? '<span style="color:var(--primary);font-weight:700;">✓</span>' : ''}
       ${state.budgets.length > 1 ? `<button class="budget-del-btn" data-del="${b.id}">✕</button>` : ''}
@@ -1779,8 +1793,11 @@ function createNewBudget() {
   const input = document.getElementById('new-budget-input');
   const name = input.value.trim();
   if (!name) { showToast('Bitte gib einen Namen ein'); return; }
-  createBudget(name);
+  createBudget(name, newBudgetMode);
   input.value = '';
+  newBudgetMode = 'monthly';
+  document.querySelectorAll('.budget-type-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === 'monthly'));
   closeBudgetModal();
   renderAll();
   showToast(`Budget "${name}" erstellt`);
@@ -2001,6 +2018,19 @@ function initEvents() {
 
   document.getElementById('new-budget-btn').addEventListener('click', createNewBudget);
   document.getElementById('new-budget-input').addEventListener('keydown', e => { if (e.key === 'Enter') createNewBudget(); });
+
+  // Budget-Typ Auswahl
+  document.querySelectorAll('.budget-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      newBudgetMode = btn.dataset.mode;
+      document.querySelectorAll('.budget-type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const hint = document.getElementById('budget-type-hint');
+      if (hint) hint.textContent = newBudgetMode === 'project'
+        ? 'Alle Ausgaben ohne Monatsbegrenzung – ideal für Projekte.'
+        : 'Zeigt Ausgaben monatsweise an.';
+    });
+  });
 
   document.getElementById('add-budget-settings-btn').addEventListener('click', openBudgetModal);
   document.getElementById('export-btn').addEventListener('click', exportCSV);

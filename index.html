@@ -419,9 +419,14 @@
     <div class="modal-body" style="padding-bottom: 8px;">
       <div id="budget-list" class="budget-list"></div>
       <div class="new-budget-row">
-        <input type="text" id="new-budget-input" class="text-input-sm" placeholder="z. B. Urlaub Mallorca">
+        <input type="text" id="new-budget-input" class="text-input-sm" placeholder="z. B. Führerschein, Urlaub …">
         <button id="new-budget-btn" class="btn-confirm">Erstellen</button>
       </div>
+      <div class="budget-type-row">
+        <button class="budget-type-btn active" data-mode="monthly">📅 Monatsbudget</button>
+        <button class="budget-type-btn"        data-mode="project">📁 Projektbudget</button>
+      </div>
+      <p class="budget-type-hint" id="budget-type-hint">Zeigt Ausgaben monatsweise an.</p>
     </div>
     <div class="modal-footer"></div>
   </div>
