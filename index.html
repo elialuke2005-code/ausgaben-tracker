@@ -343,6 +343,26 @@
       <!-- Note -->
       <textarea id="note-input" placeholder="Notiz (optional)" rows="2"></textarea>
 
+      <!-- Foto / Beleg -->
+      <div class="photo-section">
+        <div class="photo-btns-row">
+          <label class="photo-action-btn" id="photo-pick-label">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            Foto anheften
+            <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none">
+          </label>
+          <button id="photo-scan-btn" class="photo-action-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+            Betrag scannen
+          </button>
+        </div>
+        <div id="scan-status" class="scan-status"></div>
+        <div id="photo-preview-wrap" class="photo-preview-wrap hidden">
+          <img id="photo-preview" class="photo-preview" src="" alt="Beleg">
+          <button id="photo-remove-btn" class="photo-remove-btn" title="Foto entfernen">✕</button>
+        </div>
+      </div>
+
       <!-- Date -->
       <div class="date-row">
         <span class="date-label">Datum</span>
@@ -407,6 +427,9 @@
       <div class="detail-row">
         <span class="detail-row-label">Notiz</span>
         <span id="detail-note"></span>
+      </div>
+      <div id="detail-photo-wrap" class="detail-photo-wrap hidden">
+        <img id="detail-photo" class="detail-photo" src="" alt="Beleg">
       </div>
     </div>
     <div class="modal-footer">

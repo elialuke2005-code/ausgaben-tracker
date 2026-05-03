@@ -1175,6 +1175,132 @@ function renderHistory() {
   bindExpenseClicks(el);
 }
 
+// ── Foto & OCR ───────────────────────────────────────────────────
+let currentPhotoBase64 = null;
+
+function compressImage(file) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 900;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const w = Math.round(img.width  * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.55));
+    };
+    img.src = url;
+  });
+}
+
+function parseAmountFromOCR(text) {
+  const keywords = ['gesamt','summe','total','zu zahlen','endbetrag','betrag','zwischensumme','sum'];
+  const lines = text.split('\n');
+  const regex = /(\d{1,4}[.,]\d{2})/g;
+  let best = null, bestScore = -1;
+
+  lines.forEach(line => {
+    const lower = line.toLowerCase();
+    const isKey = keywords.some(k => lower.includes(k));
+    const matches = [...line.matchAll(regex)].map(m => parseFloat(m[1].replace(',','.')));
+    if (!matches.length) return;
+    const max = Math.max(...matches.filter(v => v >= 0.5 && v < 9999));
+    if (isNaN(max)) return;
+    const score = isKey ? max + 100000 : max;
+    if (score > bestScore) { bestScore = score; best = max; }
+  });
+  return best;
+}
+
+async function loadTesseract() {
+  if (window.Tesseract) return;
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+function setScanStatus(msg, isError = false) {
+  const el = document.getElementById('scan-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--danger)' : 'var(--primary)';
+}
+
+function showPhotoPreview(base64) {
+  currentPhotoBase64 = base64;
+  const wrap    = document.getElementById('photo-preview-wrap');
+  const preview = document.getElementById('photo-preview');
+  if (!wrap || !preview) return;
+  preview.src = base64;
+  wrap.classList.remove('hidden');
+}
+
+function clearPhoto() {
+  currentPhotoBase64 = null;
+  const wrap = document.getElementById('photo-preview-wrap');
+  if (wrap) wrap.classList.add('hidden');
+  const input = document.getElementById('photo-input');
+  if (input) input.value = '';
+  setScanStatus('');
+}
+
+function initPhotoEvents() {
+  const input = document.getElementById('photo-input');
+  if (!input) return;
+
+  input.addEventListener('change', async () => {
+    const file = input.files[0];
+    if (!file) return;
+    setScanStatus('Bild wird vorbereitet …');
+    const b64 = await compressImage(file);
+    showPhotoPreview(b64);
+    setScanStatus('');
+  });
+
+  document.getElementById('photo-remove-btn')?.addEventListener('click', clearPhoto);
+
+  document.getElementById('photo-scan-btn')?.addEventListener('click', async () => {
+    // Wenn noch kein Foto vorhanden → Kamera öffnen
+    if (!currentPhotoBase64) {
+      document.getElementById('photo-input').click();
+      // Warte bis Foto ausgewählt, dann scannen
+      const waitForPhoto = () => new Promise(resolve => {
+        const check = setInterval(() => {
+          if (currentPhotoBase64) { clearInterval(check); resolve(); }
+        }, 300);
+        setTimeout(() => { clearInterval(check); resolve(); }, 15000);
+      });
+      await waitForPhoto();
+      if (!currentPhotoBase64) return;
+    }
+
+    setScanStatus('⏳ Lädt OCR-Engine …');
+    try {
+      await loadTesseract();
+      setScanStatus('🔍 Erkenne Text …');
+      const result = await Tesseract.recognize(currentPhotoBase64, 'deu+eng');
+      const amount = parseAmountFromOCR(result.data.text);
+      if (amount !== null) {
+        const formatted = String(amount.toFixed(2)).replace('.', ',');
+        document.getElementById('amount-input').value = formatted;
+        setScanStatus(`✅ Betrag erkannt: ${formatted} €`);
+        updateSplitPreview();
+      } else {
+        setScanStatus('Kein Betrag gefunden – bitte manuell eingeben.', true);
+      }
+    } catch (e) {
+      setScanStatus('Fehler beim Scannen.', true);
+    }
+  });
+}
+
 // ── Render: Settings ─────────────────────────────────────────────
 function renderSettings() {
   renderSettingsBudgets();
@@ -1326,6 +1452,7 @@ function closeAddModal() {
   document.getElementById('modal-add').classList.add('hidden');
   stopVoice();
   selectedCategory = null;
+  clearPhoto();
 }
 
 function setTypeToggle(type) {
@@ -1388,7 +1515,7 @@ function saveExpense() {
     }
   }
 
-  addExpense({ amount, category: selectedCategory, note, date, type: selectedType, payment: selectedPayment, split: splitData });
+  addExpense({ amount, category: selectedCategory, note, date, type: selectedType, payment: selectedPayment, split: splitData, photo: currentPhotoBase64 || null });
   closeAddModal();
   renderAll();
   const label = selectedType === 'income' ? 'Einnahme' : 'Ausgabe';
@@ -1430,6 +1557,18 @@ function openDetailModal(expenseId) {
       } else { splitEl.style.display = 'none'; }
     } else { splitEl.style.display = 'none'; }
   }
+  // Foto
+  const photoWrap = document.getElementById('detail-photo-wrap');
+  const photoImg  = document.getElementById('detail-photo');
+  if (photoWrap && photoImg) {
+    if (e.photo) {
+      photoImg.src = e.photo;
+      photoWrap.classList.remove('hidden');
+    } else {
+      photoWrap.classList.add('hidden');
+    }
+  }
+
   document.getElementById('detail-del-btn').dataset.id = e.id;
   document.getElementById('modal-detail').classList.remove('hidden');
 }
@@ -1731,6 +1870,7 @@ function init() {
     state.currentBudgetId = state.budgets[0].id;
 
   initVoice();
+  initPhotoEvents();
   processRecurringPayments();
   renderAll();
   initEvents();
