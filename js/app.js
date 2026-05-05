@@ -67,6 +67,7 @@ let state = {
   incomeCategories: JSON.parse(JSON.stringify(DEFAULT_INCOME_CATEGORIES)),
   splitMembers: [],
   recurringPayments: [],
+  paymentMethods: [],  // [{id, name, emoji}] — optional, user-defined cards
 };
 
 let selectedCategory = null;
@@ -131,6 +132,8 @@ function migrateState() {
   state.categories = state.categories.filter(c => c.name !== 'Gehalt');
   if (!state.splitMembers) state.splitMembers = [];
   if (!state.recurringPayments) state.recurringPayments = [];
+  if (!state.paymentMethods) state.paymentMethods = [];
+  state.budgets.forEach(b => { if (b.limit === undefined) b.limit = null; });
 }
 
 function load() {
@@ -339,6 +342,18 @@ function initAuth() {
     });
   });
 
+  // Passwort vergessen
+  document.getElementById('forgot-password-btn').addEventListener('click', () => {
+    const email = document.getElementById('auth-email').value.trim();
+    if (!email) { setAuthError('Bitte zuerst E-Mail-Adresse eingeben.'); return; }
+    setAuthError('');
+    auth.sendPasswordResetEmail(email)
+      .then(() => showToast('✅ Reset-Link gesendet – prüfe dein Postfach'))
+      .catch(err => setAuthError(err.code === 'auth/user-not-found'
+        ? 'Keine Konto mit dieser E-Mail gefunden.'
+        : err.message));
+  });
+
   // Ohne Konto fortfahren
   document.getElementById('auth-skip-btn').addEventListener('click', () => {
     hideAuthOverlay();
@@ -485,7 +500,7 @@ function deleteBudget(id) {
   save();
 }
 
-function switchBudget(id) { state.currentBudgetId = id; save(); }
+function switchBudget(id) { state.currentBudgetId = id; historyPaymentFilter = null; save(); }
 
 // ── Recurring Payments ───────────────────────────────────────────
 let recurringEditId   = null;
@@ -996,6 +1011,22 @@ function renderHome() {
 
   document.getElementById('summary-count').textContent = `${moAll.length} Buchung${moAll.length !== 1 ? 'en' : ''}`;
 
+  // Budget-Limit Fortschrittsbalken
+  const limitWrap = document.getElementById('budget-limit-bar-wrap');
+  if (b.limit && b.limit > 0) {
+    const pct = Math.min(Math.round(totalExpense / b.limit * 100), 100);
+    const over = totalExpense > b.limit;
+    const color = pct < 70 ? 'var(--income)' : pct < 90 ? '#F59E0B' : 'var(--danger)';
+    const pctEl  = document.getElementById('budget-limit-bar-pct');
+    document.getElementById('budget-limit-bar-label').textContent = `${fmt(totalExpense)} von ${fmt(b.limit)}`;
+    pctEl.textContent = over ? `+${fmt(totalExpense - b.limit)} überzogen!` : `${pct}%`;
+    pctEl.style.color = over ? 'var(--danger)' : 'var(--muted)';
+    document.getElementById('budget-limit-bar-fill').style.cssText = `width:${pct}%;background:${color}`;
+    limitWrap.classList.remove('hidden');
+  } else {
+    limitWrap.classList.add('hidden');
+  }
+
   renderCategoryBreakdown(moAll);
   renderSettlement();
   renderQuickCats();
@@ -1039,7 +1070,8 @@ function expenseHTML(e) {
   const isIncome = e.type === 'income';
   const iconBg = isIncome ? '#D1FAE5' : getCatColor(e.category);
   const amountStr = (isIncome ? '+' : '') + fmt(e.amount);
-  const payIcon = !isIncome && e.payment ? `<span class="payment-icon">${e.payment === 'cash' ? '💵' : '💳'}</span>` : '';
+  const payLabel = !isIncome && e.payment ? getPaymentLabel(e.payment) : '';
+  const payIcon  = payLabel ? `<span class="payment-icon">${payLabel}</span>` : '';
 
   let splitBadge = '', splitShareLine = '';
   if (e.split?.enabled) {
@@ -1173,8 +1205,33 @@ function renderStats() {
 }
 
 // ── Render: History ──────────────────────────────────────────────
-function renderHistory() {
+let historyPaymentFilter = null; // null = alle, sonst payment-Wert
+
+function renderHistoryFilterBar() {
+  const bar = document.getElementById('history-filter-bar');
+  if (!bar) return;
   const b = currentBudget();
+  if (!b) return;
+  const usedMethods = [...new Set(b.expenses.map(e => e.payment).filter(Boolean))];
+  if (usedMethods.length === 0) { bar.classList.add('hidden'); historyPaymentFilter = null; return; }
+  bar.classList.remove('hidden');
+  const pills = [null, ...usedMethods];
+  bar.innerHTML = pills.map(m => {
+    const active = historyPaymentFilter === m;
+    const label  = m === null ? 'Alle' : getPaymentLabel(m);
+    return `<button class="history-filter-pill${active ? ' active' : ''}" data-method="${m === null ? '' : m}">${label}</button>`;
+  }).join('');
+  bar.querySelectorAll('.history-filter-pill').forEach(btn =>
+    btn.addEventListener('click', () => {
+      historyPaymentFilter = btn.dataset.method || null;
+      renderHistory();
+    })
+  );
+}
+
+function renderHistory() {
+  renderHistoryFilterBar();
+  const b  = currentBudget();
   const el = document.getElementById('history-content');
   if (!b || b.expenses.length === 0) {
     el.innerHTML = `<div class="empty-state">
@@ -1184,10 +1241,37 @@ function renderHistory() {
     </div>`;
     return;
   }
+
+  // Filter anwenden
+  let expenses = historyPaymentFilter !== null
+    ? b.expenses.filter(e => e.payment === historyPaymentFilter)
+    : b.expenses;
+
+  // Zusammenfassung bei aktivem Filter
+  let summaryHTML = '';
+  if (historyPaymentFilter !== null) {
+    const totalOut = expenses.filter(e => (e.type||'expense')==='expense').reduce((s,e)=>s+e.amount,0);
+    const totalIn  = expenses.filter(e => e.type==='income').reduce((s,e)=>s+e.amount,0);
+    const label = getPaymentLabel(historyPaymentFilter);
+    summaryHTML = `<div class="history-filter-summary">
+      <span>${label} · ${expenses.length} Buchung${expenses.length!==1?'en':''}</span>
+      <span class="hfs-amount">${totalIn > 0 ? `+${fmt(totalIn)} · ` : ''}${fmt(totalOut)}</span>
+    </div>`;
+  }
+
+  if (expenses.length === 0) {
+    el.innerHTML = summaryHTML + `<div class="empty-state">
+      <div class="es-icon">🔍</div>
+      <div class="es-title">Keine Einträge</div>
+      <div class="es-sub">Keine Buchungen mit dieser Zahlungsart</div>
+    </div>`;
+    return;
+  }
+
   const groups = {};
-  b.expenses.forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
+  expenses.forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
   const dates = Object.keys(groups).sort((a,b) => b.localeCompare(a));
-  el.innerHTML = dates.map(d => {
+  el.innerHTML = summaryHTML + dates.map(d => {
     const exs = groups[d];
     const dayNet = exs.reduce((s,e) => s + (e.type === 'income' ? e.amount : -e.amount), 0);
     const dayNetStr = (dayNet > 0 ? '+' : '') + fmt(dayNet);
@@ -1201,6 +1285,105 @@ function renderHistory() {
     </div>`;
   }).join('');
   bindExpenseClicks(el);
+}
+
+// ── Payment Methods ──────────────────────────────────────────────
+function getPaymentLabel(payment) {
+  if (!payment) return '';
+  if (payment === 'cash') return '💵 Bar';
+  if (payment === 'card') return '💳 Karte';
+  const pm = state.paymentMethods.find(m => m.name === payment);
+  return pm ? `${pm.emoji || '💳'} ${pm.name}` : `💳 ${payment}`;
+}
+
+function renderPaymentBtns() {
+  const el = document.getElementById('payment-btns');
+  if (!el) return;
+  let btns;
+  if (state.paymentMethods.length === 0) {
+    btns = [
+      { key: 'cash', label: '💵 Bar' },
+      { key: 'card', label: '💳 Karte' },
+    ];
+  } else {
+    btns = state.paymentMethods.map(m => ({ key: m.name, label: `${m.emoji || '💳'} ${m.name}` }));
+  }
+  el.innerHTML = btns.map(b =>
+    `<button class="payment-btn ${selectedPayment === b.key ? 'active' : ''}" data-payment="${esc(b.key)}">${b.label}</button>`
+  ).join('');
+  el.querySelectorAll('.payment-btn').forEach(btn =>
+    btn.addEventListener('click', () => setPaymentMethod(btn.dataset.payment))
+  );
+}
+
+function renderPaymentMethodsSettings() {
+  const el = document.getElementById('payment-methods-list');
+  if (!el) return;
+  if (!state.paymentMethods || state.paymentMethods.length === 0) {
+    el.innerHTML = '<div style="padding:8px 16px;font-size:13px;color:var(--muted);">Noch keine Zahlungsmethoden hinterlegt.</div>';
+    return;
+  }
+  el.innerHTML = state.paymentMethods.map(m => `
+    <div class="cat-manage-chip">
+      <span>${m.emoji || '💳'}</span>
+      <span>${esc(m.name)}</span>
+      <button class="cat-remove-btn" data-id="${m.id}" title="Löschen">✕</button>
+    </div>`).join('');
+  el.querySelectorAll('.cat-remove-btn').forEach(btn =>
+    btn.addEventListener('click', () => {
+      state.paymentMethods = state.paymentMethods.filter(m => m.id !== btn.dataset.id);
+      save(); renderPaymentMethodsSettings();
+    })
+  );
+}
+
+function addPaymentMethod() {
+  const emoji = document.getElementById('new-pm-emoji').value.trim() || '💳';
+  const name  = document.getElementById('new-pm-name').value.trim();
+  if (!name) { showToast('Bitte gib einen Namen ein'); return; }
+  if (state.paymentMethods.find(m => m.name.toLowerCase() === name.toLowerCase())) {
+    showToast('Diese Methode existiert bereits'); return;
+  }
+  state.paymentMethods.push({ id: uid(), name, emoji });
+  save();
+  document.getElementById('new-pm-emoji').value = '';
+  document.getElementById('new-pm-name').value = '';
+  renderPaymentMethodsSettings();
+  showToast(`"${name}" hinzugefügt`);
+}
+
+// ── Budget-Limit ─────────────────────────────────────────────────
+let editingBudgetLimitId = null;
+
+function openBudgetLimitModal(budgetId) {
+  editingBudgetLimitId = budgetId;
+  const b = state.budgets.find(x => x.id === budgetId);
+  const inp = document.getElementById('budget-limit-input');
+  inp.value = b?.limit ? String(b.limit).replace('.', ',') : '';
+  document.getElementById('modal-budget-limit').classList.remove('hidden');
+  setTimeout(() => inp.focus(), 100);
+}
+
+function closeBudgetLimitModal() {
+  document.getElementById('modal-budget-limit').classList.add('hidden');
+  editingBudgetLimitId = null;
+}
+
+function saveBudgetLimit() {
+  const raw = document.getElementById('budget-limit-input').value.replace(',', '.').trim();
+  const limit = parseFloat(raw);
+  const b = state.budgets.find(x => x.id === editingBudgetLimitId);
+  if (!b) return;
+  b.limit = (!raw || isNaN(limit) || limit <= 0) ? null : Math.round(limit * 100) / 100;
+  save(); renderAll(); closeBudgetLimitModal();
+  showToast(b.limit ? `Limit: ${fmt(b.limit)}` : 'Limit entfernt');
+}
+
+function clearBudgetLimit() {
+  const b = state.budgets.find(x => x.id === editingBudgetLimitId);
+  if (b) b.limit = null;
+  save(); renderAll(); closeBudgetLimitModal();
+  showToast('Limit entfernt');
 }
 
 // ── Support ───────────────────────────────────────────────────────
@@ -1441,6 +1624,7 @@ function renderSettings() {
   renderCatManagement();
   renderRecurringSettings();
   renderIncomeCatManagement();
+  renderPaymentMethodsSettings();
   // Sync dark mode toggle
   const toggle = document.getElementById('dark-mode-toggle');
   if (toggle) toggle.checked = darkMode;
@@ -1485,16 +1669,21 @@ function renderSettingsBudgets() {
     <div class="settings-row ${b.id === state.currentBudgetId ? 'active-budget' : ''}"
          data-switch="${b.id}" style="cursor:pointer;">
       <span class="settings-row-icon">${b.mode === 'project' ? '📁' : '📅'}</span>
-      <span class="settings-row-text">${esc(b.name)}
-        <span style="font-size:12px;color:var(--muted);margin-left:6px;">${b.mode === 'project' ? 'Projekt · ' : ''}${b.expenses.length} Einträge</span>
-      </span>
-      ${b.id === state.currentBudgetId ? '<span style="color:var(--primary);font-weight:700;">✓</span>' : ''}
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:14px;">${esc(b.name)}
+          ${b.id === state.currentBudgetId ? '<span style="color:var(--primary);margin-left:6px;">✓</span>' : ''}
+        </div>
+        <div style="font-size:12px;color:var(--muted);">
+          ${b.mode === 'project' ? 'Projekt · ' : ''}${b.expenses.length} Einträge${b.limit ? ` · Limit ${fmt(b.limit)}` : ''}
+        </div>
+      </div>
+      <button class="icon-btn budget-limit-btn" data-id="${b.id}" title="Budgetlimit">🎯</button>
       ${state.budgets.length > 1 ? `<button class="budget-del-btn" data-del="${b.id}">✕</button>` : ''}
     </div>`).join('');
 
   el.querySelectorAll('[data-switch]').forEach(row => {
     row.addEventListener('click', e => {
-      if (e.target.closest('[data-del]')) return;
+      if (e.target.closest('[data-del]') || e.target.closest('.budget-limit-btn')) return;
       switchBudget(row.dataset.switch);
       renderAll();
     });
@@ -1508,6 +1697,9 @@ function renderSettingsBudgets() {
         renderAll();
       }
     });
+  });
+  el.querySelectorAll('.budget-limit-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); openBudgetLimitModal(btn.dataset.id); });
   });
 }
 
@@ -1563,8 +1755,8 @@ function openAddModal(preselect = null, preType = null) {
   document.getElementById('note-input').value = '';
   document.getElementById('date-input').value = todayStr();
   document.getElementById('voice-status').textContent = '';
-  // Reset payment toggle
-  document.querySelectorAll('.payment-btn').forEach(b => b.classList.remove('active'));
+  // Reset payment
+  selectedPayment = null;
   // Show/hide payment section based on type
   const paySection = document.getElementById('payment-section');
   if (paySection) paySection.classList.toggle('hidden', selectedType === 'income');
@@ -1577,6 +1769,7 @@ function openAddModal(preselect = null, preType = null) {
   if (splitPreview) splitPreview.textContent = '';
   setTypeToggle(selectedType);
   renderCatPills(preselect);
+  renderPaymentBtns();
   document.getElementById('modal-add').classList.remove('hidden');
   setTimeout(() => document.getElementById('amount-input').focus(), 320);
 }
@@ -1607,7 +1800,8 @@ function openEditExpense(expenseId) {
   renderCatPills(e.category);
 
   // Zahlungsart
-  setPaymentMethod(e.payment || null);
+  selectedPayment = e.payment || null;
+  renderPaymentBtns();
 
   // Notiz + Datum
   document.getElementById('note-input').value  = e.note || '';
@@ -1643,6 +1837,7 @@ function setTypeToggle(type) {
   // Show/hide payment method (only for expenses)
   const paySection = document.getElementById('payment-section');
   if (paySection) paySection.classList.toggle('hidden', type === 'income');
+  if (type !== 'income') renderPaymentBtns();
   // Re-render pills for the correct category list
   renderCatPills(null);
 }
@@ -1733,9 +1928,9 @@ function openDetailModal(expenseId) {
   // Payment method
   const payEl = document.getElementById('detail-payment');
   if (payEl) {
-    if (e.payment === 'cash') { payEl.textContent = '💵 Bar'; payEl.style.display = ''; }
-    else if (e.payment === 'card') { payEl.textContent = '💳 Karte'; payEl.style.display = ''; }
-    else { payEl.textContent = ''; payEl.style.display = 'none'; }
+    const payLabel = getPaymentLabel(e.payment);
+    if (payLabel) { payEl.textContent = payLabel; payEl.closest('#detail-payment-row').style.display = ''; }
+    else { payEl.textContent = ''; payEl.closest('#detail-payment-row').style.display = 'none'; }
   }
   // Split info
   const splitEl = document.getElementById('detail-split');
@@ -1905,12 +2100,13 @@ function parseVoice(text) {
 function exportCSV() {
   const b = currentBudget();
   if (!b || b.expenses.length === 0) { showToast('Keine Einträge zum Exportieren'); return; }
-  const rows = [['Datum','Typ','Kategorie','Betrag (EUR)','Notiz']];
+  const rows = [['Datum','Typ','Kategorie','Betrag (EUR)','Zahlungsart','Notiz']];
   b.expenses.forEach(e => rows.push([
     e.date,
     e.type === 'income' ? 'Einnahme' : 'Ausgabe',
     e.category,
     (e.type === 'income' ? '' : '-') + e.amount.toFixed(2),
+    e.payment ? getPaymentLabel(e.payment).replace(/\p{Emoji}/gu, '').trim() : '',
     e.note || ''
   ]));
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -2065,9 +2261,17 @@ function initEvents() {
   // Dark mode toggle
   document.getElementById('dark-mode-toggle').addEventListener('change', toggleDarkMode);
 
-  // Payment method buttons
-  document.querySelectorAll('.payment-btn').forEach(btn => {
-    btn.addEventListener('click', () => setPaymentMethod(btn.dataset.payment));
+  // Zahlungsmethoden (Settings)
+  document.getElementById('add-pm-btn').addEventListener('click', addPaymentMethod);
+  document.getElementById('new-pm-name').addEventListener('keydown', e => { if (e.key === 'Enter') addPaymentMethod(); });
+
+  // Budget-Limit Modal
+  document.getElementById('budget-limit-close-btn').addEventListener('click', closeBudgetLimitModal);
+  document.getElementById('budget-limit-save-btn').addEventListener('click', saveBudgetLimit);
+  document.getElementById('budget-limit-clear-btn').addEventListener('click', clearBudgetLimit);
+  document.getElementById('budget-limit-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveBudgetLimit(); });
+  document.getElementById('modal-budget-limit').addEventListener('click', e => {
+    if (e.target.id === 'modal-budget-limit') closeBudgetLimitModal();
   });
 
   // Split toggle

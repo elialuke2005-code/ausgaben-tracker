@@ -1933,3 +1933,56 @@ body.dark .auth-btn-secondary {
 body.dark .auth-divider::before,
 body.dark .auth-divider::after { background: #334155; }
 body.dark .auth-footer { color: #475569; }
+
+/* ── Passwort vergessen ─────────────────────── */
+.auth-forgot-btn {
+  background: none; border: none; padding: 0;
+  font-size: 13px; color: var(--primary); cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.auth-forgot-btn:hover { opacity: 0.75; }
+
+/* ── Budget-Limit Fortschrittsbalken ─────────── */
+.budget-limit-bar-wrap {
+  padding: 10px 0 0;
+}
+.budget-limit-bar-info {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; margin-bottom: 6px;
+}
+.budget-limit-bar-label { color: rgba(255,255,255,0.85); font-weight: 500; }
+.budget-limit-bar-pct   { color: rgba(255,255,255,0.7);  font-size: 11px; }
+.budget-limit-bar-bg {
+  height: 6px; border-radius: 99px;
+  background: rgba(255,255,255,0.25); overflow: hidden;
+}
+.budget-limit-bar-fill {
+  height: 100%; border-radius: 99px;
+  transition: width 0.4s ease, background 0.3s;
+}
+
+/* ── History Filter ──────────────────────────── */
+.history-filter-bar {
+  display: flex; gap: 8px; padding: 0 16px 12px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.history-filter-bar::-webkit-scrollbar { display: none; }
+.history-filter-pill {
+  flex-shrink: 0; padding: 6px 14px; border-radius: 99px;
+  border: 1.5px solid var(--border); background: var(--surface);
+  font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.history-filter-pill.active {
+  background: var(--primary); border-color: var(--primary);
+  color: #fff;
+}
+.history-filter-summary {
+  display: flex; justify-content: space-between; align-items: center;
+  margin: 0 16px 12px; padding: 10px 14px; border-radius: var(--radius-sm);
+  background: var(--primary-light); border: 1.5px solid var(--primary-mid);
+  font-size: 13px; color: var(--text);
+}
+.hfs-amount { font-weight: 700; color: var(--danger); }
+body.dark .history-filter-summary { background: #1E293B; border-color: #334155; }

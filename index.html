@@ -56,6 +56,15 @@
             <div class="s-mini-val" id="summary-expense">0,00 €</div>
           </div>
         </div>
+        <div id="budget-limit-bar-wrap" class="budget-limit-bar-wrap hidden">
+          <div class="budget-limit-bar-info">
+            <span id="budget-limit-bar-label" class="budget-limit-bar-label"></span>
+            <span id="budget-limit-bar-pct"   class="budget-limit-bar-pct"></span>
+          </div>
+          <div class="budget-limit-bar-bg">
+            <div id="budget-limit-bar-fill" class="budget-limit-bar-fill"></div>
+          </div>
+        </div>
         <div class="s-divider"></div>
         <div class="s-bottom">
           <span class="s-count" id="summary-count">0 Buchungen</span>
@@ -86,6 +95,7 @@
         <span class="section-title" style="margin-bottom:0">Alle Buchungen</span>
         <button id="history-export-btn" class="export-btn">📥 CSV</button>
       </div>
+      <div id="history-filter-bar" class="history-filter-bar hidden"></div>
       <div id="history-content"></div>
     </section>
 
@@ -159,6 +169,17 @@
           </div>
           <div id="accent-swatches" class="accent-swatches"></div>
         </div>
+      </div>
+
+      <div class="settings-block">
+        <div class="settings-block-title">Zahlungsmethoden</div>
+        <div id="payment-methods-list" class="cat-manage-wrap"></div>
+        <div class="add-cat-row">
+          <input type="text" id="new-pm-emoji" class="text-input-sm emoji-input" placeholder="💳" maxlength="2">
+          <input type="text" id="new-pm-name" class="text-input-sm" placeholder="z. B. Visa, EC, PayPal">
+          <button id="add-pm-btn" class="btn-confirm">Hinzufügen</button>
+        </div>
+        <div style="padding:2px 16px 10px;font-size:12px;color:var(--muted);">Karten hier hinterlegen – bei Ausgaben wählbar &amp; im Verlauf filterbar.</div>
       </div>
 
       <div class="settings-block">
@@ -341,10 +362,7 @@
       <!-- Payment Method (expense only) -->
       <div id="payment-section">
         <div class="field-label">Zahlungsart <span style="font-weight:400;text-transform:none;font-size:11px;">(optional)</span></div>
-        <div class="payment-toggle">
-          <button class="payment-btn" data-payment="cash">💵 Bar</button>
-          <button class="payment-btn" data-payment="card">💳 Karte</button>
-        </div>
+        <div id="payment-btns" class="payment-toggle"></div>
       </div>
 
       <!-- Split -->
@@ -520,6 +538,9 @@
         <button id="email-login-btn"    class="auth-btn-primary">Anmelden</button>
         <button id="email-register-btn" class="auth-btn-secondary">Registrieren</button>
       </div>
+      <div style="text-align:center;margin-top:6px;">
+        <button id="forgot-password-btn" class="auth-forgot-btn">Passwort vergessen?</button>
+      </div>
       <div id="auth-error" class="auth-error"></div>
     </div>
 
@@ -627,6 +648,33 @@
     </div>
     <div class="modal-footer">
       <button id="name-save-btn" class="save-btn">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal: Budget-Limit ─────────────────────────────────────── -->
+<div id="modal-budget-limit" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">Budgetlimit setzen</div>
+      <button id="budget-limit-close-btn" class="modal-close-btn">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;color:var(--muted);margin:0 0 20px;">Optionales Ausgabenlimit. Auf der Startseite siehst du dann einen farbigen Fortschrittsbalken.</p>
+      <div class="amount-section" style="margin-bottom:0;">
+        <div class="amount-center">
+          <div class="amount-display">
+            <span class="euro-prefix">€</span>
+            <input type="text" id="budget-limit-input" inputmode="decimal" placeholder="z. B. 500,00" autocomplete="off">
+          </div>
+          <div class="amount-line"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex;gap:10px;">
+      <button id="budget-limit-clear-btn" class="delete-btn" style="flex:1;">Limit entfernen</button>
+      <button id="budget-limit-save-btn"  class="save-btn"   style="flex:1;">Speichern</button>
     </div>
   </div>
 </div>
