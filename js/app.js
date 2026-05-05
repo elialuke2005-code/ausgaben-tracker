@@ -1191,6 +1191,9 @@ function renderStats() {
   const labelEl = document.getElementById('donut-label');
   if (labelEl) labelEl.textContent = statsType === 'income' ? 'Einnahmen' : 'Ausgaben';
 
+  // Monatsvergleich mitaktualisieren wenn offen
+  renderMonthlyComparison();
+
   // Legend
   const legend = document.getElementById('stats-legend');
   if (!legend) return;
@@ -1209,6 +1212,78 @@ function renderStats() {
       <span class="legend-amount">${fmt(d.amount)}</span>
     </div>`;
   }).join('');
+}
+
+// ── Monatsvergleich ──────────────────────────────────────────────
+let monthlyCompareOpen = false;
+
+function toggleMonthlyCompare() {
+  monthlyCompareOpen = !monthlyCompareOpen;
+  document.getElementById('monthly-compare-wrap').classList.toggle('hidden', !monthlyCompareOpen);
+  document.getElementById('monthly-compare-toggle').classList.toggle('open', monthlyCompareOpen);
+  if (monthlyCompareOpen) renderMonthlyComparison();
+}
+
+function renderMonthlyComparison() {
+  if (!monthlyCompareOpen) return;
+  const b = currentBudget();
+  if (!b) return;
+
+  const MONTHS_SHORT = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  const now = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      key:   `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+      label: MONTHS_SHORT[d.getMonth()],
+    });
+  }
+
+  const data = months.map(m => {
+    const exps = b.expenses.filter(e => e.date.startsWith(m.key));
+    return {
+      ...m,
+      expense: exps.filter(e => (e.type||'expense')==='expense').reduce((s,e)=>s+e.amount,0),
+      income:  exps.filter(e => e.type==='income').reduce((s,e)=>s+e.amount,0),
+    };
+  });
+
+  const values  = data.map(d => statsType === 'income' ? d.income : d.expense);
+  const maxVal  = Math.max(...values, 1);
+  const current = currentMonthStr();
+
+  // SVG: viewBox 300×130
+  const VW = 300, VH = 130;
+  const barW = 34, cols = data.length;
+  const gap  = (VW - cols * barW) / (cols + 1);
+  const maxBarH = 75;
+
+  const bars = data.map((d, i) => {
+    const val   = values[i];
+    const barH  = val > 0 ? Math.max(Math.round((val / maxVal) * maxBarH), 4) : 0;
+    const x     = Math.round(gap + i * (barW + gap));
+    const y     = 88 - barH;
+    const isCur = d.key === current;
+    const color = isCur ? 'var(--primary)' : 'var(--primary-mid)';
+    const lbl   = val >= 1000 ? `${(val/1000).toFixed(1)}k` : val > 0 ? Math.round(val).toString() : '';
+    return `
+      ${barH > 0 ? `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="5" fill="${color}"/>` : `<rect x="${x}" y="88" width="${barW}" height="2" rx="1" fill="var(--border)"/>`}
+      ${lbl ? `<text x="${x+barW/2}" y="${y-5}" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="-apple-system,sans-serif">${lbl}</text>` : ''}
+      <text x="${x+barW/2}" y="108" text-anchor="middle" font-size="10"
+        fill="${isCur ? 'var(--text)' : 'var(--muted)'}"
+        font-weight="${isCur ? '700' : '400'}"
+        font-family="-apple-system,sans-serif">${d.label}</text>`;
+  }).join('');
+
+  const typeLabel = statsType === 'income' ? 'Einnahmen' : 'Ausgaben';
+  const svg = document.getElementById('monthly-compare-svg');
+  if (svg) {
+    svg.setAttribute('viewBox', `0 0 ${VW} ${VH}`);
+    svg.innerHTML = `
+      <text x="0" y="14" font-size="11" fill="var(--muted)" font-family="-apple-system,sans-serif">${typeLabel} – letzte 6 Monate</text>
+      ${bars}`;
+  }
 }
 
 // ── Render: History ──────────────────────────────────────────────
@@ -2168,6 +2243,9 @@ function initEvents() {
   // Month navigation (stats)
   document.getElementById('stats-prev-btn').addEventListener('click', () => shiftMonth(-1));
   document.getElementById('stats-next-btn').addEventListener('click', () => shiftMonth(+1));
+
+  // Monatsvergleich Toggle
+  document.getElementById('monthly-compare-toggle').addEventListener('click', toggleMonthlyCompare);
 
   // Stats type toggle
   document.querySelectorAll('.seg-btn').forEach(btn => {

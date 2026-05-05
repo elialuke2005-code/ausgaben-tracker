@@ -1992,3 +1992,26 @@ body.dark .auth-footer { color: #475569; }
 }
 .hfs-amount { font-weight: 700; color: var(--danger); }
 body.dark .history-filter-summary { background: #1E293B; border-color: #334155; }
+
+/* ── Monatsvergleich ────────────────────────── */
+.monthly-compare-btn {
+  display: flex; align-items: center; justify-content: space-between;
+  width: calc(100% - 32px); margin: 8px 16px 0;
+  padding: 12px 16px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1.5px solid var(--border);
+  font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer;
+  box-shadow: var(--shadow-sm); transition: background 0.15s;
+}
+.monthly-compare-btn:active { background: var(--primary-light); }
+.monthly-compare-btn svg { transition: transform 0.25s ease; flex-shrink: 0; }
+.monthly-compare-btn.open svg { transform: rotate(180deg); }
+.monthly-compare-wrap {
+  margin: 6px 16px 16px;
+  padding: 16px 16px 8px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  border: 1.5px solid var(--border);
+}
+body.dark .monthly-compare-btn { background: var(--surface); border-color: var(--border); }
+body.dark .monthly-compare-wrap { background: var(--surface); border-color: var(--border); }
