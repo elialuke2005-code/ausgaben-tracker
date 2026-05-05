@@ -115,6 +115,7 @@ function save() {
       ...state,
       darkMode,
       accentColor,
+      userName: customUserName || null,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }).catch(() => {});
   }
