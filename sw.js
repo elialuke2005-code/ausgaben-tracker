@@ -1,8 +1,15 @@
-const CACHE = 'ausgaben-v12';
+const CACHE = 'ausgaben-v13';
 const FILES = ['./', './index.html', './css/style.css', './js/app.js', './js/firebase-config.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
+  // cache: 'reload' erzwingt frische Netzwerk-Requests, ignoriert Browser-HTTP-Cache
+  e.waitUntil(
+    caches.open(CACHE).then(c =>
+      Promise.all(FILES.map(url =>
+        fetch(url, { cache: 'reload' }).then(r => c.put(url, r))
+      ))
+    )
+  );
   self.skipWaiting();
 });
 
