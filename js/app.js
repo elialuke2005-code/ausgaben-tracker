@@ -133,6 +133,13 @@ function migrateState() {
   if (!state.splitMembers) state.splitMembers = [];
   if (!state.recurringPayments) state.recurringPayments = [];
   if (!state.paymentMethods) state.paymentMethods = [];
+  // Standard-Methoden auffüllen falls leer (Bar + Karte immer als Ausgangspunkt)
+  if (state.paymentMethods.length === 0) {
+    state.paymentMethods = [
+      { id: 'default-cash', name: 'Bar',   emoji: '💵' },
+      { id: 'default-card', name: 'Karte', emoji: '💳' },
+    ];
+  }
   state.budgets.forEach(b => { if (b.limit === undefined) b.limit = null; });
 }
 
@@ -1299,17 +1306,8 @@ function getPaymentLabel(payment) {
 function renderPaymentBtns() {
   const el = document.getElementById('payment-btns');
   if (!el) return;
-  let btns;
-  if (state.paymentMethods.length === 0) {
-    btns = [
-      { key: 'cash', label: '💵 Bar' },
-      { key: 'card', label: '💳 Karte' },
-    ];
-  } else {
-    btns = state.paymentMethods.map(m => ({ key: m.name, label: `${m.emoji || '💳'} ${m.name}` }));
-  }
-  el.innerHTML = btns.map(b =>
-    `<button class="payment-btn ${selectedPayment === b.key ? 'active' : ''}" data-payment="${esc(b.key)}">${b.label}</button>`
+  el.innerHTML = state.paymentMethods.map(m =>
+    `<button class="payment-btn ${selectedPayment === m.name ? 'active' : ''}" data-payment="${esc(m.name)}">${m.emoji || '💳'} ${esc(m.name)}</button>`
   ).join('');
   el.querySelectorAll('.payment-btn').forEach(btn =>
     btn.addEventListener('click', () => setPaymentMethod(btn.dataset.payment))
