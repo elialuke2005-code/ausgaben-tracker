@@ -291,14 +291,26 @@ function initAuth() {
     }
   });
 
-  // Google Sign-In (Redirect ist auf mobilen PWAs zuverlässiger als Popup)
+  // Google Sign-In — Popup bevorzugt (zuverlässiger nach Sign-Out in PWAs)
   const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+  // Redirect-Ergebnis abfangen (falls vorheriger Redirect-Versuch stattfand)
   auth.getRedirectResult().then(result => {
     if (result && result.user) hideAuthOverlay();
-  }).catch(err => setAuthError(err.message));
+  }).catch(() => {});
 
   document.getElementById('google-signin-btn').addEventListener('click', () => {
-    auth.signInWithRedirect(googleProvider).catch(err => setAuthError(err.message));
+    setAuthError('');
+    auth.signInWithPopup(googleProvider)
+      .then(result => { if (result.user) hideAuthOverlay(); })
+      .catch(err => {
+        // Popup geblockt → Redirect als Fallback
+        if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
+          auth.signInWithRedirect(googleProvider).catch(e => setAuthError(e.message));
+        } else {
+          setAuthError(err.message);
+        }
+      });
   });
 
   // E-Mail Anmelden
