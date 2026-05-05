@@ -1,4 +1,4 @@
-const CACHE = 'ausgaben-v11';
+const CACHE = 'ausgaben-v12';
 const FILES = ['./', './index.html', './css/style.css', './js/app.js', './js/firebase-config.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {

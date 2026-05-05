@@ -41,6 +41,10 @@ body.dark {
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
+button, a, input, textarea, select, label {
+  touch-action: manipulation; /* verhindert Doppeltipp-Zoom auf interaktiven Elementen */
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
   background: var(--bg);
@@ -48,6 +52,8 @@ body {
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
+  overscroll-behavior: none;       /* kein Bounce / Pull-to-Refresh */
+  -webkit-overflow-scrolling: auto; /* kein unkontrolliertes Momentum-Scroll */
   user-select: none;
   -webkit-user-select: none;
   transition: background 0.25s, color 0.25s;
